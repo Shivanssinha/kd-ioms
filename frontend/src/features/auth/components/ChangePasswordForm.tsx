@@ -11,12 +11,14 @@ import { ApiError } from '@/lib/api/api-error';
 export interface ChangePasswordFormProps {
   onSuccess?: () => void;
   cancelHref?: string;
+  onCancel?: () => void;
   isMandatoryChange?: boolean;
 }
 
 export function ChangePasswordForm({
   onSuccess,
   cancelHref,
+  onCancel,
   isMandatoryChange = false,
 }: ChangePasswordFormProps) {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -213,14 +215,22 @@ export function ChangePasswordForm({
 
       {/* Form Action Buttons */}
       <div className="flex items-center gap-3 pt-2">
-        {cancelHref && (
+        {cancelHref ? (
           <Link
             href={cancelHref}
             className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs text-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
           >
             Cancel
           </Link>
-        )}
+        ) : onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs text-center hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          >
+            Cancel
+          </button>
+        ) : null}
 
         <Button
           type="submit"

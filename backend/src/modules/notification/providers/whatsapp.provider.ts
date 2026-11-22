@@ -14,7 +14,7 @@ export class WhatsAppProvider {
     }
 
     // Live Meta WhatsApp Cloud API call
-    if (env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID) {
+    if (env.NODE_ENV !== 'test' && env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID) {
       try {
         // Clean phone number (Indian format: 10 digits or with +91)
         let phone = recipientPhone.replace(/\D/g, '');
@@ -81,11 +81,16 @@ export class WhatsAppProvider {
       }
     }
 
-    // Default development/CI mock simulator (auto-succeed)
-    return {
-      success: true,
-      providerMessageId: `mock-wamid-${Date.now()}`,
-    };
+    // CI / Unit Test simulator
+    if (env.NODE_ENV === 'test') {
+      return {
+        success: true,
+        providerMessageId: `mock-wamid-${Date.now()}`,
+      };
+    }
+
+    // In runtime without credentials, do NOT mock success: fail so it cascades to Email
+    throw new Error('WhatsApp credentials not configured (WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID missing)');
   }
 }
 

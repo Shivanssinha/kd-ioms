@@ -115,6 +115,18 @@ export interface OrderDetailData {
     invoiceNumber: string;
     total: string;
     pdfPath: string | null;
+    latestNotification?: {
+      channel: 'WHATSAPP' | 'EMAIL';
+      status: 'PENDING' | 'SENT' | 'FAILED';
+      errorMessage?: string | null;
+      lastAttemptAt?: string | null;
+    } | null;
+    notifications?: Array<{
+      channel: 'WHATSAPP' | 'EMAIL';
+      status: 'PENDING' | 'SENT' | 'FAILED';
+      errorMessage?: string | null;
+      lastAttemptAt?: string | null;
+    }>;
   } | null;
 }
 

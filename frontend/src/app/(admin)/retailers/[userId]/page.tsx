@@ -6,8 +6,12 @@ import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { RejectionModal } from '@/features/retailer/components/RejectionModal';
+import { KeyRound } from 'lucide-react';
+import { useToast } from '@/providers/ToastProvider';
+import { useResetPassword } from '@/features/users/hooks';
 import {
   useRetailerDetail,
   useApproveRetailer,
@@ -37,10 +41,18 @@ function RetailerDetailContent() {
   const { data: retailer, isLoading, isError, refetch } = useRetailerDetail(userId);
   const approveMutation = useApproveRetailer();
   const rejectMutation = useRejectRetailer();
+  const resetPasswordMutation = useResetPassword();
+  const { showSuccess, showError } = useToast();
 
   // Modals state
   const [isApproveOpen, setIsApproveOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [resetModalData, setResetModalData] = useState<{
+    isOpen: boolean;
+    temporaryPassword?: string;
+  }>({ isOpen: false });
+  const [copiedPass, setCopiedPass] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const handleCopy = (field: string, text: string) => {
@@ -135,7 +147,19 @@ function RetailerDetailContent() {
             Account ID: <span className="font-mono">{retailer.userId}</span>
           </p>
         </div>
-        <div>{getStatusBadge(retailer.approvalStatus)}</div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsResetConfirmOpen(true)}
+            isLoading={resetPasswordMutation.isPending}
+            className="border-slate-300 text-slate-700 hover:bg-slate-50 font-medium flex items-center gap-1.5"
+          >
+            <KeyRound className="w-4 h-4 text-slate-500" />
+            Reset Password
+          </Button>
+          {getStatusBadge(retailer.approvalStatus)}
+        </div>
       </div>
 
       {/* Rejection Remarks Callout if Rejected */}
@@ -347,6 +371,69 @@ function RetailerDetailContent() {
         isLoading={rejectMutation.isPending}
         shopName={retailer.shopName}
       />
+
+      {/* Reset Password Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={isResetConfirmOpen}
+        onClose={() => setIsResetConfirmOpen(false)}
+        onConfirm={async () => {
+          if (!retailer.userId) return;
+          try {
+            const res = await resetPasswordMutation.mutateAsync(retailer.userId);
+            setIsResetConfirmOpen(false);
+            setResetModalData({
+              isOpen: true,
+              temporaryPassword: res.temporaryPassword,
+            });
+            setCopiedPass(false);
+            showSuccess(`Temporary password generated for ${retailer.shopName}.`);
+          } catch (err: unknown) {
+            showError(err instanceof Error ? err.message : 'Failed to reset password.');
+          }
+        }}
+        title="Reset Retailer Password"
+        message={`Are you sure you want to reset the password for ${retailer.shopName} (${retailer.username})? A new temporary password will be generated, and all existing active sessions for this retailer will be revoked.`}
+        confirmLabel="Reset Password"
+        variant="danger"
+        isLoading={resetPasswordMutation.isPending}
+      />
+
+      {/* Temporary Password Modal */}
+      <Modal
+        isOpen={resetModalData.isOpen}
+        onClose={() => setResetModalData({ isOpen: false })}
+        title="Temporary Password Generated"
+        description={`New temporary password for ${retailer.shopName} (${retailer.username}).`}
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-xs text-amber-800 font-medium mb-2">
+              Important: This temporary password is only shown once. Copy and share it securely with the retailer.
+            </p>
+            <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-amber-200">
+              <span className="font-mono font-bold text-slate-900 tracking-wider">
+                {resetModalData.temporaryPassword}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (resetModalData.temporaryPassword) {
+                    navigator.clipboard.writeText(resetModalData.temporaryPassword);
+                    setCopiedPass(true);
+                    setTimeout(() => setCopiedPass(false), 2000);
+                  }
+                }}
+              >
+                {copiedPass ? '✓ Copied' : 'Copy Password'}
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">
+            The retailer will be required to choose a new password upon their next login.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }

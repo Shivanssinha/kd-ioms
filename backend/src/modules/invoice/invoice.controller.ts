@@ -210,10 +210,14 @@ export class InvoiceController {
       forceChannel: bodyParsed.data.channel,
     });
 
+    const allFailed = logs.length > 0 && logs.every((l) => l.status === 'FAILED');
+
     return res.status(202).json({
-      success: true,
-      code: 'NOTIFICATION_RESENT',
-      message: 'Invoice notification dispatch queued',
+      success: !allFailed,
+      code: allFailed ? 'NOTIFICATION_FAILED' : 'NOTIFICATION_RESENT',
+      message: allFailed
+        ? `Invoice notification delivery failed: ${logs.map((l) => `${l.channel}: ${l.errorMessage || 'Failed'}`).join('; ')}`
+        : 'Invoice notification dispatch queued',
       data: {
         invoiceId,
         logs,

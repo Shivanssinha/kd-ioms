@@ -15,10 +15,13 @@ import {
   Camera,
   ExternalLink,
   FileText,
+  Send,
 } from 'lucide-react';
 import { getOrderById, cancelOrder, rejectOrder, type OrderDetailData } from '../../lib/api/orders.api';
 import { overrideDeliveryOrder } from '../../lib/api/delivery.api';
+import { resendInvoiceNotification } from '../../lib/api/invoice.api';
 import { useAuth } from '../../providers/AuthProvider';
+import { useToast } from '../../providers/ToastProvider';
 import { OrderTimeline } from './OrderTimeline';
 import { OrderRejectModal } from './components/OrderRejectModal';
 import { Modal } from '../../components/ui/Modal';
@@ -49,9 +52,18 @@ export function OrderDetailView({ orderId }: OrderDetailViewProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
+  const { showToast } = useToast();
+  const showToastRef = React.useRef(showToast);
+  showToastRef.current = showToast;
+
   const [order, setOrder] = useState<OrderDetailData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Invoice Notification Resend state
+  const [isResendingNotification, setIsResendingNotification] = useState(false);
+  const [notificationChannel, setNotificationChannel] = useState<'WHATSAPP' | 'EMAIL' | undefined>(undefined);
+  const toastShownRef = React.useRef(false);
 
   // Cancellation Modal state (Retailer)
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -82,6 +94,19 @@ export function OrderDetailView({ orderId }: OrderDetailViewProps) {
         if (!isMounted) return;
         if (res.success && res.data) {
           setOrder(res.data);
+          // If invoice notification failed on both channels, alert via toast
+          if (
+            !toastShownRef.current &&
+            res.data.invoice?.latestNotification?.status === 'FAILED'
+          ) {
+            toastShownRef.current = true;
+            showToastRef.current({
+              type: 'error',
+              title: 'Invoice Notification Failed',
+              message: `Delivery failed for invoice #${res.data.invoice.invoiceNumber}. Both WhatsApp and Email attempts were unsuccessful.`,
+              durationMs: 7000,
+            });
+          }
         } else {
           setError(res.message || 'Failed to load order');
         }
@@ -98,6 +123,50 @@ export function OrderDetailView({ orderId }: OrderDetailViewProps) {
       isMounted = false;
     };
   }, [orderId]);
+
+  const handleResendInvoice = async (channel?: 'WHATSAPP' | 'EMAIL') => {
+    if (!order?.invoice?.invoiceId || isResendingNotification) return;
+    setIsResendingNotification(true);
+    try {
+      const selected = channel ?? notificationChannel;
+      const res = await resendInvoiceNotification(order.invoice.invoiceId, selected);
+      const logs = res.data?.logs || [];
+      const allFailed = logs.length > 0 && logs.every((l) => l.status === 'FAILED');
+
+      if (allFailed || !res.success) {
+        const failureDetails = logs.map((l) => `${l.channel}: ${l.errorMessage || 'Failed'}`).join('; ');
+        showToast({
+          type: 'error',
+          title: 'Notification Delivery Failed',
+          message: failureDetails || res.message || 'Notification delivery failed on both WhatsApp and Email.',
+          durationMs: 8000,
+        });
+      } else {
+        const sentLog = logs.find((l) => l.status === 'SENT');
+        const channelLabel = sentLog ? sentLog.channel : selected || 'configured channel';
+        showToast({
+          type: 'success',
+          title: 'Notification Sent',
+          message: `Invoice notification successfully dispatched via ${channelLabel}!`,
+        });
+      }
+
+      // Refresh order to reflect updated notification status
+      const updated = await getOrderById(orderId);
+      if (updated.success && updated.data) {
+        setOrder(updated.data);
+      }
+    } catch (err: unknown) {
+      showToast({
+        type: 'error',
+        title: 'Notification Resend Error',
+        message: err instanceof Error ? err.message : 'Failed to resend notification.',
+        durationMs: 7000,
+      });
+    } finally {
+      setIsResendingNotification(false);
+    }
+  };
 
   const handleConfirmCancel = async () => {
     if (isCancelling) return;
@@ -313,6 +382,34 @@ export function OrderDetailView({ orderId }: OrderDetailViewProps) {
             </button>
           )}
 
+          {/* Admin Resend Notification Action on Prev Order */}
+          {isAdmin && order.invoice && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <select
+                style={{ color: '#000000', WebkitTextFillColor: '#000000', colorScheme: 'light' }}
+                className="text-xs border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 bg-white text-black !text-black min-h-[36px]"
+                value={notificationChannel || ''}
+                onChange={(e) => setNotificationChannel((e.target.value as 'WHATSAPP' | 'EMAIL') || undefined)}
+                disabled={isResendingNotification}
+              >
+                <option value="">Cascade (WhatsApp → Email)</option>
+                <option value="WHATSAPP">WhatsApp Only</option>
+                <option value="EMAIL">Email Only</option>
+              </select>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-[36px] text-xs font-bold flex items-center gap-1.5"
+                onClick={() => handleResendInvoice()}
+                disabled={isResendingNotification}
+                isLoading={isResendingNotification}
+              >
+                <Send className="w-3.5 h-3.5" />
+                Resend Notification
+              </Button>
+            </div>
+          )}
+
           {/* Retailer Cancel Button (Visible only while PLACED) */}
           {!isAdmin && isPlaced && (
             <button
@@ -326,6 +423,37 @@ export function OrderDetailView({ orderId }: OrderDetailViewProps) {
           )}
         </div>
       </div>
+
+      {/* Invoice Notification Failure Banner */}
+      {order.invoice?.latestNotification?.status === 'FAILED' && (
+        <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-600 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-bold text-rose-900 dark:text-rose-200">
+                Invoice Notification Delivery Failed
+              </p>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mt-0.5">
+                Delivery failed on both WhatsApp and Email for invoice #{order.invoice.invoiceNumber}.
+                {order.invoice.latestNotification.errorMessage ? ` (${order.invoice.latestNotification.errorMessage})` : ''}
+              </p>
+            </div>
+          </div>
+          {isAdmin && (
+            <button
+              type="button"
+              disabled={isResendingNotification}
+              onClick={() => handleResendInvoice()}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors shrink-0 shadow-sm disabled:opacity-50"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isResendingNotification ? 'animate-spin' : ''}`} />
+              {isResendingNotification ? 'Resending...' : 'Retry Resend'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Order Header Summary */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">

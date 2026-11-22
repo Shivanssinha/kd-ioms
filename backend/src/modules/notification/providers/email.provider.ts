@@ -15,7 +15,7 @@ export class EmailProvider {
     }
 
     // Live Nodemailer SMTP call
-    if (env.SMTP_HOST && env.SMTP_USER) {
+    if (env.NODE_ENV !== 'test' && env.SMTP_HOST && env.SMTP_USER) {
       try {
         const transporter = nodemailer.createTransport({
           host: env.SMTP_HOST,
@@ -67,11 +67,16 @@ export class EmailProvider {
       }
     }
 
-    // Default development/CI mock simulator (auto-succeed)
-    return {
-      success: true,
-      providerMessageId: `mock-email-${Date.now()}`,
-    };
+    // CI / Unit Test simulator
+    if (env.NODE_ENV === 'test') {
+      return {
+        success: true,
+        providerMessageId: `mock-email-${Date.now()}`,
+      };
+    }
+
+    // In runtime without credentials, do NOT mock success
+    throw new Error('Email SMTP credentials not configured (SMTP_HOST or SMTP_USER missing)');
   }
 }
 

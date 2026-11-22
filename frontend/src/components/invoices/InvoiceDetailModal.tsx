@@ -5,6 +5,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Spinner } from '../ui/Spinner';
+import { useToast } from '../../providers/ToastProvider';
 import {
   getInvoiceById,
   getInvoicePdfUrl,
@@ -25,6 +26,7 @@ export function InvoiceDetailModal({
   onClose,
   isAdmin = false,
 }: InvoiceDetailModalProps) {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -110,14 +112,42 @@ export function InvoiceDetailModal({
     try {
       setResending(true);
       setResendSuccess(null);
+      setError(null);
       const res = await resendInvoiceNotification(invoiceId, selectedChannel);
-      if (res.success) {
-        setResendSuccess('Notification queued successfully!');
-        // Refresh invoice details to show new notification log entry
-        await loadInvoice(invoiceId);
+      const logs = res.data?.logs || [];
+      const allFailed = logs.length > 0 && logs.every((l) => l.status === 'FAILED');
+
+      if (allFailed || !res.success) {
+        const failureDetails = logs.map((l) => `${l.channel}: ${l.errorMessage || 'Failed'}`).join('; ');
+        const errMsg = failureDetails || res.message || 'Notification failed on both WhatsApp and Email';
+        setError(errMsg);
+        showToast({
+          type: 'error',
+          title: 'Notification Delivery Failed',
+          message: errMsg,
+          durationMs: 7000,
+        });
+      } else {
+        const sentLog = logs.find((l) => l.status === 'SENT');
+        const channelLabel = sentLog ? sentLog.channel : selectedChannel || 'configured channel';
+        const msg = `Notification successfully sent via ${channelLabel}!`;
+        setResendSuccess(msg);
+        showToast({
+          type: 'success',
+          title: 'Notification Sent',
+          message: msg,
+        });
       }
+      await loadInvoice(invoiceId);
     } catch (err: unknown) {
-      alert(`Resend failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const errMsg = err instanceof Error ? err.message : 'Unknown error during resend';
+      setError(errMsg);
+      showToast({
+        type: 'error',
+        title: 'Notification Resend Error',
+        message: errMsg,
+        durationMs: 7000,
+      });
     } finally {
       setResending(false);
     }

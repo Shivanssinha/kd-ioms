@@ -12,6 +12,15 @@ vi.mock('../../../providers/AuthProvider', () => ({
   }),
 }));
 
+// Mock useToast
+vi.mock('../../../providers/ToastProvider', () => ({
+  useToast: () => ({
+    showToast: vi.fn(),
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+  }),
+}));
+
 describe('OrderDetailView Component', () => {
   beforeEach(() => {
     vi.restoreAllMocks();

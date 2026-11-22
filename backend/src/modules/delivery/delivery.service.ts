@@ -746,7 +746,8 @@ export class DeliveryService {
       } catch (invoiceErr: any) {
         console.error(
           `[DELIVERY COMPLETE: INVOICE GENERATION FAILED] Order #${orderId}:`,
-          invoiceErr.message
+          invoiceErr.message,
+          invoiceErr.cause?.message || invoiceErr.cause || ''
         );
       }
     }

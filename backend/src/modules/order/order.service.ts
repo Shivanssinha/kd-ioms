@@ -596,26 +596,53 @@ export class OrderService {
             `SELECT invoice_id, invoice_number, total::TEXT AS total, pdf_path FROM invoices WHERE order_id = $1`,
             [orderId]
           );
+          let inv: any = null;
           if (invRes.rows.length > 0) {
-            return {
+            inv = {
               invoiceId: invRes.rows[0].invoice_id,
               invoiceNumber: invRes.rows[0].invoice_number,
               total: invRes.rows[0].total,
               pdfPath: invRes.rows[0].pdf_path,
             };
+          } else {
+            // If DELIVERED but invoice record is not yet present, auto-generate on-the-fly
+            try {
+              const { invoiceService } = await import('../invoice/invoice.service.js');
+              const generated = await invoiceService.generateInvoice(orderId);
+              inv = {
+                invoiceId: generated.invoiceId,
+                invoiceNumber: generated.invoiceNumber,
+                total: generated.total,
+                pdfPath: generated.pdfPath,
+              };
+            } catch (autoGenErr: any) {
+              console.warn(`[ORDER INVOICE AUTO-GEN] Could not generate invoice for order #${orderId}:`, autoGenErr.message);
+            }
           }
-          // If DELIVERED but invoice record is not yet present, auto-generate on-the-fly
-          try {
-            const { invoiceService } = await import('../invoice/invoice.service.js');
-            const generated = await invoiceService.generateInvoice(orderId);
-            return {
-              invoiceId: generated.invoiceId,
-              invoiceNumber: generated.invoiceNumber,
-              total: generated.total,
-              pdfPath: generated.pdfPath,
-            };
-          } catch (autoGenErr: any) {
-            console.warn(`[ORDER INVOICE AUTO-GEN] Could not generate invoice for order #${orderId}:`, autoGenErr.message);
+
+          if (inv) {
+            try {
+              const notifRes = await query(
+                `SELECT channel, status, error_message, last_attempt_at
+                 FROM notification_logs
+                 WHERE invoice_id = $1
+                 ORDER BY log_id DESC
+                 LIMIT 5`,
+                [inv.invoiceId]
+              );
+              const logs = notifRes.rows.map((r: any) => ({
+                channel: r.channel,
+                status: r.status,
+                errorMessage: r.error_message || null,
+                lastAttemptAt: r.last_attempt_at ? new Date(r.last_attempt_at).toISOString() : null,
+              }));
+              inv.latestNotification = logs.length > 0 ? logs[0] : null;
+              inv.notifications = logs;
+            } catch {
+              inv.latestNotification = null;
+              inv.notifications = [];
+            }
+            return inv;
           }
         }
         return null;

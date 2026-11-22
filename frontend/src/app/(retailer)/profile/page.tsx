@@ -7,8 +7,11 @@ import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
+import { Modal } from '@/components/ui/Modal';
+import { ChangePasswordForm } from '@/features/auth/components/ChangePasswordForm';
 import { useRetailerProfile, useUpsertProfile } from '@/features/retailer/hooks';
 import { useAuth } from '@/providers/AuthProvider';
+import { useToast } from '@/providers/ToastProvider';
 import { ApiError } from '@/lib/api/api-error';
 import {
   LogOut,
@@ -25,6 +28,8 @@ import {
   Calendar,
   Copy,
   Check,
+  KeyRound,
+  Lock,
 } from 'lucide-react';
 import {
   retailerProfileFormSchema,
@@ -34,7 +39,9 @@ import {
 
 export default function RetailerProfilePage() {
   const { user, logout } = useAuth();
+  const { showSuccess } = useToast();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const {
     profile,
@@ -182,18 +189,31 @@ export default function RetailerProfilePage() {
             Manage your pharmacy business details, licensing credentials, and account verification status.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleLogout}
-          isLoading={isLoggingOut}
-          data-testid="retailer-logout-btn"
-          className="self-start sm:self-center shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 font-medium"
-        >
-          <LogOut className="w-4 h-4 mr-1.5" />
-          Sign Out
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsChangePasswordOpen(true)}
+            data-testid="retailer-reset-password-btn"
+            className="self-start sm:self-center shrink-0 border-slate-300 text-slate-700 hover:bg-slate-50 font-medium flex items-center gap-1.5"
+          >
+            <KeyRound className="w-4 h-4 text-slate-500" />
+            Reset Password
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            isLoading={isLoggingOut}
+            data-testid="retailer-logout-btn"
+            className="self-start sm:self-center shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300 font-medium"
+          >
+            <LogOut className="w-4 h-4 mr-1.5" />
+            Sign Out
+          </Button>
+        </div>
       </div>
 
       {/* Retailer Account Overview & Identity Card */}
@@ -305,15 +325,25 @@ export default function RetailerProfilePage() {
               ? `Member since ${new Date(profile.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`
               : 'Registered Pharmacy Partner'}
           </span>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="text-xs text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1 hover:underline"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            Sign Out
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setIsChangePasswordOpen(true)}
+              className="text-xs text-slate-600 hover:text-slate-900 font-medium flex items-center gap-1 hover:underline"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              Reset Password
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="text-xs text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1 hover:underline"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
 
@@ -578,6 +608,22 @@ export default function RetailerProfilePage() {
           </form>
         </div>
       )}
+
+      {/* Reset Account Password Modal */}
+      <Modal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        title="Reset Account Password"
+        description="Set a new secure password for your retailer account."
+      >
+        <ChangePasswordForm
+          onSuccess={() => {
+            setIsChangePasswordOpen(false);
+            showSuccess('Your password has been updated successfully!');
+          }}
+          onCancel={() => setIsChangePasswordOpen(false)}
+        />
+      </Modal>
     </div>
   );
 }
