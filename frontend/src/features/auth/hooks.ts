@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import * as authApi from './api';
 import { useAuth } from '../../providers/AuthProvider';
 import { useToast } from '../../providers/ToastProvider';
@@ -23,13 +23,13 @@ export function useLogin() {
 
 export function useLogout() {
   const { logout: clearAuthContext } = useAuth();
-  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => authApi.logout(),
     onSuccess: () => {
-      queryClient.clear();
-      clearAuthContext();
+      // authApi.logout() already called POST /auth/logout; pass skipServerCall=true
+      // so AuthProvider.logout only clears local state without a second server call.
+      clearAuthContext(true);
     },
   });
 }

@@ -37,10 +37,10 @@ describe('Security Hardening & Protection Tests (Plan 11-01)', () => {
   });
 
   describe('Authentication Cookie Scoping & Path Enforcement', () => {
-    it('verifies refresh token cookie options specify HttpOnly and Path=/api/v1/auth', () => {
+    it('verifies refresh token cookie options specify HttpOnly and Path=/', () => {
       const options = getRefreshCookieOptions();
       expect(options.httpOnly).toBe(true);
-      expect(options.path).toBe('/api/v1/auth');
+      expect(options.path).toBe('/');
       expect(options.maxAge).toBe(7 * 24 * 60 * 60 * 1000);
     });
   });

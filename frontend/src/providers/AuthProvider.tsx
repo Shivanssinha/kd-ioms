@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiFetch, setAccessToken } from '../lib/api/client';
+import { apiFetch, setAccessToken, getAccessToken, refreshAccessToken } from '../lib/api/client';
 
 export interface AuthUser {
   id: string;
@@ -17,7 +17,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   login: (token: string, user: AuthUser) => void;
-  logout: () => Promise<void>;
+  logout: (skipServerCall?: boolean) => Promise<void>;
   setUser: (user: AuthUser | null) => void;
 }
 
@@ -33,50 +33,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(token);
     setUser(userData);
     if (typeof document !== 'undefined') {
-      document.cookie = `userRole=${encodeURIComponent(userData.role)}; path=/; max-age=900; SameSite=Lax`;
+      document.cookie = `userRole=${encodeURIComponent(userData.role)}; path=/; max-age=604800; SameSite=Lax`;
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await apiFetch('/auth/logout', { method: 'POST', credentials: 'include' });
-    } catch {
-      // Ignore logout errors
-    } finally {
-      setAccessToken(null);
-      setUser(null);
-      queryClient.clear();
-      if (typeof document !== 'undefined') {
-        document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
-        document.cookie = 'userRole=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
-        document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
-        document.cookie = 'refreshToken=; path=/api/v1/auth; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
-        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
+  const logout = useCallback(async (skipServerCall = false) => {
+    if (!skipServerCall) {
+      try {
+        await apiFetch('/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch {
+        // Ignore logout errors — server-side logout is best-effort
       }
-      router.replace('/login');
     }
+    setAccessToken(null);
+    setUser(null);
+    queryClient.clear();
+    if (typeof document !== 'undefined') {
+      document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
+      document.cookie = 'userRole=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
+      document.cookie = 'refreshToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
+      document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; max-age=0; SameSite=Lax';
+    }
+    router.replace('/login');
   }, [queryClient, router]);
 
-  // On initial mount, attempt silent refresh
+  // On initial mount, restore or refresh session
   useEffect(() => {
     let isMounted = true;
 
     async function initAuth() {
       try {
-        const refreshRes = await fetch('/api/v1/auth/refresh', { method: 'POST' });
-        if (refreshRes.ok) {
-          const json = await refreshRes.json();
-          if (json.success && json.data?.accessToken) {
-            setAccessToken(json.data.accessToken);
+        const currentToken = getAccessToken();
+
+        // 1. If an access token is already available, verify and load current user directly
+        if (currentToken) {
+          try {
             const meRes = await apiFetch<AuthUser>('/auth/me');
-            if (isMounted && meRes.success) {
+            if (isMounted && meRes.success && meRes.data) {
               setUser(meRes.data);
               if (typeof document !== 'undefined') {
-                document.cookie = `userRole=${encodeURIComponent(meRes.data.role)}; path=/; max-age=900; SameSite=Lax`;
+                document.cookie = `userRole=${encodeURIComponent(meRes.data.role)}; path=/; max-age=604800; SameSite=Lax`;
               }
+              return;
             }
+          } catch {
+            // Token may have expired or is invalid, proceed to refresh
           }
-        } else {
+        }
+
+        // 2. If no valid access token or /auth/me failed, use centralized refresh mutex
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          const meRes = await apiFetch<AuthUser>('/auth/me');
+          if (isMounted && meRes.success && meRes.data) {
+            setUser(meRes.data);
+            if (typeof document !== 'undefined') {
+              document.cookie = `userRole=${encodeURIComponent(meRes.data.role)}; path=/; max-age=604800; SameSite=Lax`;
+            }
+            return;
+          }
+        }
+
+        // 3. If refresh failed, reset auth state
+        if (isMounted) {
           setAccessToken(null);
           setUser(null);
           if (typeof document !== 'undefined') {
@@ -85,11 +104,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch {
-        setAccessToken(null);
-        setUser(null);
-        if (typeof document !== 'undefined') {
-          document.cookie = 'accessToken=; path=/; max-age=0; SameSite=Lax';
-          document.cookie = 'userRole=; path=/; max-age=0; SameSite=Lax';
+        if (isMounted) {
+          setAccessToken(null);
+          setUser(null);
+          if (typeof document !== 'undefined') {
+            document.cookie = 'accessToken=; path=/; max-age=0; SameSite=Lax';
+            document.cookie = 'userRole=; path=/; max-age=0; SameSite=Lax';
+          }
         }
       } finally {
         if (isMounted) {

@@ -64,7 +64,7 @@ export function getRefreshCookieOptions(): CookieOptions {
     httpOnly: true,
     secure: env.COOKIE_SECURE,
     sameSite: env.COOKIE_SAME_SITE,
-    path: '/api/v1/auth',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
   };
 }

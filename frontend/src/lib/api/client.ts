@@ -53,7 +53,7 @@ export interface ApiResponse<T = unknown> {
   }>;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   if (refreshPromise) {
     return refreshPromise;
   }
@@ -138,7 +138,11 @@ export async function apiFetch<T = unknown>(
     const clone = res.clone();
     try {
       const errJson = (await clone.json()) as { code?: string };
-      if (errJson?.code === 'AUTH_TOKEN_EXPIRED') {
+      if (
+        errJson?.code === 'AUTH_TOKEN_EXPIRED' ||
+        errJson?.code === 'AUTH_REQUIRED' ||
+        errJson?.code === 'AUTH_TOKEN_INVALID'
+      ) {
         const newToken = await refreshAccessToken();
         if (newToken) {
           reqHeaders['Authorization'] = `Bearer ${newToken}`;

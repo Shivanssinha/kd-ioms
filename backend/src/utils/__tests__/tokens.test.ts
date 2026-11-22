@@ -62,7 +62,7 @@ describe('Token Utilities', () => {
   it('returns secure HttpOnly cookie options for refresh tokens', () => {
     const options = getRefreshCookieOptions();
     expect(options.httpOnly).toBe(true);
-    expect(options.path).toBe('/api/v1/auth');
+    expect(options.path).toBe('/');
     expect(options.maxAge).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });

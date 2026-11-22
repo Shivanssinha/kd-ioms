@@ -20,10 +20,17 @@ const RETAILER_PATHS = [
   '/profile',
 ];
 
-const SHARED_PROTECTED_PATHS = [
-  '/orders',
+const DELIVERY_PATHS = [
   '/delivery',
   '/pool',
+  '/deliveries',
+  '/history',
+  '/place-order',
+];
+
+const SHARED_PROTECTED_PATHS = [
+  '/orders',
+  '/change-password',
 ];
 
 export function middleware(request: NextRequest) {
@@ -39,8 +46,9 @@ export function middleware(request: NextRequest) {
 
   const isAdminPath = ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const isRetailerPath = RETAILER_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const isDeliveryPath = DELIVERY_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const isSharedPath = SHARED_PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  const isProtectedPath = isAdminPath || isRetailerPath || isSharedPath;
+  const isProtectedPath = isAdminPath || isRetailerPath || isDeliveryPath || isSharedPath;
 
   // 1. Unauthorized access: if neither access nor refresh token is present, redirect to /login
   if (isProtectedPath && !token) {
@@ -64,15 +72,29 @@ export function middleware(request: NextRequest) {
 
   // 3. Role-based isolation for authenticated users
   if (token && role) {
-    // Non-admin trying to access admin dashboard or management pages
-    if (isAdminPath && role !== 'ADMIN') {
-      const target = role === 'RETAILER' ? '/catalog' : '/delivery/orders';
-      return NextResponse.redirect(new URL(target, request.url));
+    // Delivery partner trying to access admin or retailer-only pages
+    if (role === 'DELIVERY') {
+      if (isAdminPath || isRetailerPath || pathname === '/orders') {
+        return NextResponse.redirect(new URL('/delivery/orders', request.url));
+      }
     }
 
-    // Admin trying to access retailer cart checkout
-    if (role === 'ADMIN' && (pathname === '/cart' || pathname.startsWith('/cart/'))) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    // Retailer trying to access admin or delivery-only pages
+    if (role === 'RETAILER') {
+      if (isAdminPath || isDeliveryPath) {
+        return NextResponse.redirect(new URL('/catalog', request.url));
+      }
+    }
+
+    // Admin trying to access retailer cart/catalog or delivery pages directly
+    if (role === 'ADMIN') {
+      if (
+        (pathname === '/cart' || pathname.startsWith('/cart/')) ||
+        (pathname === '/catalog' || pathname.startsWith('/catalog/')) ||
+        isDeliveryPath
+      ) {
+        return NextResponse.redirect(new URL('/dashboard', request.url));
+      }
     }
   }
 

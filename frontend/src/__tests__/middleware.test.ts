@@ -103,4 +103,76 @@ describe('Next.js Route Protection Middleware', () => {
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toBe('http://localhost:3000/catalog');
   });
+
+  it('redirects unauthorized users from /delivery/orders to /login', () => {
+    const req = createMockRequest('/delivery/orders');
+    const res = middleware(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost:3000/login?callbackUrl=%2Fdelivery%2Forders');
+  });
+
+  it('allows authenticated delivery partner with token to access /delivery/orders', () => {
+    const req = createMockRequest('/delivery/orders', {
+      accessToken: 'valid-delivery-jwt',
+      userRole: 'DELIVERY',
+    });
+    const res = middleware(req);
+
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('allows authenticated delivery partner with only refreshToken to access /delivery/orders', () => {
+    const req = createMockRequest('/delivery/orders', {
+      refreshToken: 'valid-refresh-token',
+      userRole: 'DELIVERY',
+    });
+    const res = middleware(req);
+
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('redirects authenticated delivery partner attempting to access /dashboard to /delivery/orders', () => {
+    const req = createMockRequest('/dashboard', {
+      accessToken: 'valid-delivery-jwt',
+      userRole: 'DELIVERY',
+    });
+    const res = middleware(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost:3000/delivery/orders');
+  });
+
+  it('redirects authenticated delivery partner attempting to access /catalog to /delivery/orders', () => {
+    const req = createMockRequest('/catalog', {
+      accessToken: 'valid-delivery-jwt',
+      userRole: 'DELIVERY',
+    });
+    const res = middleware(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost:3000/delivery/orders');
+  });
+
+  it('redirects authenticated delivery partner on /login directly to /delivery/orders', () => {
+    const req = createMockRequest('/login', {
+      accessToken: 'valid-delivery-jwt',
+      userRole: 'DELIVERY',
+    });
+    const res = middleware(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost:3000/delivery/orders');
+  });
+
+  it('redirects authenticated retailer attempting to access /delivery/orders to /catalog', () => {
+    const req = createMockRequest('/delivery/orders', {
+      accessToken: 'valid-retailer-jwt',
+      userRole: 'RETAILER',
+    });
+    const res = middleware(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost:3000/catalog');
+  });
 });
