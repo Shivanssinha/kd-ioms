@@ -5,6 +5,7 @@ import { Spinner } from '../../../components/ui/Spinner';
 
 export interface MedicineSearchProps {
   onSelect: (medicine: MedicineRecord) => void;
+  onCreateNew?: (query: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
@@ -12,6 +13,7 @@ export interface MedicineSearchProps {
 
 export function MedicineSearch({
   onSelect,
+  onCreateNew,
   placeholder = 'Search by medicine brand name or salt formula...',
   autoFocus = false,
   className = '',
@@ -146,8 +148,20 @@ export function MedicineSearch({
               );
             })
           ) : !isLoading ? (
-            <div className="px-4 py-6 text-center text-slate-400 text-xs">
-              No matching medicines found for &quot;{query}&quot;.
+            <div className="px-4 py-5 text-center text-slate-500 text-xs space-y-2.5">
+              <p>No matching medicines found for &quot;{query}&quot;.</p>
+              {onCreateNew && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onCreateNew(query.trim());
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer mx-auto"
+                >
+                  <span>+ Create Medicine &quot;{query.trim()}&quot;</span>
+                </button>
+              )}
             </div>
           ) : null}
         </div>

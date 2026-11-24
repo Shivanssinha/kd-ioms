@@ -16,11 +16,31 @@ router.get(
   }
 );
 
+// 1b. Get Invoice Details by Order ID
+router.get(
+  '/by-order/:orderId',
+  authenticate,
+  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER, USER_ROLE.DELIVERY),
+  (req: Request, res: Response, next: NextFunction) => {
+    invoiceController.getInvoiceByOrderId(req, res).catch(next);
+  }
+);
+
+// 1c. Download Invoice PDF by Order ID
+router.get(
+  '/by-order/:orderId/download',
+  authenticate,
+  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER, USER_ROLE.DELIVERY),
+  (req: Request, res: Response, next: NextFunction) => {
+    invoiceController.downloadInvoiceByOrderId(req, res).catch(next);
+  }
+);
+
 // 2. Get Invoice Details (with lines and notification history)
 router.get(
   '/:invoiceId',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER),
+  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER, USER_ROLE.DELIVERY),
   (req: Request, res: Response, next: NextFunction) => {
     invoiceController.getInvoiceById(req, res).catch(next);
   }
@@ -30,7 +50,7 @@ router.get(
 router.get(
   '/:invoiceId/pdf',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER),
+  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER, USER_ROLE.DELIVERY),
   (req: Request, res: Response, next: NextFunction) => {
     invoiceController.getInvoicePdf(req, res).catch(next);
   }
@@ -40,7 +60,7 @@ router.get(
 router.get(
   '/:invoiceId/download',
   authenticate,
-  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER),
+  authorize(USER_ROLE.ADMIN, USER_ROLE.RETAILER, USER_ROLE.DELIVERY),
   (req: Request, res: Response, next: NextFunction) => {
     invoiceController.downloadInvoicePdf(req, res).catch(next);
   }

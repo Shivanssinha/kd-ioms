@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { invoiceService } from './invoice.service.js';
 import { notificationService } from '../notification/notification.service.js';
 import { getInvoicePdfSignedUrl } from '../../utils/storage.js';
+import { query } from '../../config/db.js';
 import {
   listInvoicesQuerySchema,
   invoiceIdParamSchema,
@@ -55,6 +56,107 @@ export class InvoiceController {
   }
 
   /**
+   * GET /api/v1/invoices/by-order/:orderId
+   */
+  async getInvoiceByOrderId(req: Request, res: Response) {
+    const orderId = parseInt(String(req.params.orderId), 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      throw new ValidationError({
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'A valid positive integer orderId is required in path parameter',
+      });
+    }
+
+    const user = (req as any).user;
+    const invoice = await invoiceService.getInvoiceByOrderId(orderId);
+    if (!invoice) {
+      throw new NotFoundError({
+        code: ERROR_CODES.NOT_FOUND,
+        message: 'Invoice not found for this order',
+      });
+    }
+
+    if (user.role === USER_ROLE.RETAILER && invoice.retailerId !== user.userId) {
+      throw new NotFoundError({
+        code: ERROR_CODES.NOT_FOUND,
+        message: 'Invoice not found',
+      });
+    }
+
+    if (user.role === USER_ROLE.DELIVERY) {
+      const orderRes = await query(
+        `SELECT delivery_partner_id FROM orders WHERE order_id = $1`,
+        [orderId]
+      );
+      if (orderRes.rowCount === 0 || orderRes.rows[0].delivery_partner_id !== user.userId) {
+        throw new NotFoundError({
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Invoice not found',
+        });
+      }
+    }
+
+    return ok(res, {
+      code: 'INVOICE_RETRIEVED',
+      message: 'Invoice retrieved successfully',
+      data: invoice,
+    });
+  }
+
+  /**
+   * GET /api/v1/invoices/by-order/:orderId/download
+   */
+  async downloadInvoiceByOrderId(req: Request, res: Response) {
+    const orderId = parseInt(String(req.params.orderId), 10);
+    if (isNaN(orderId) || orderId <= 0) {
+      throw new ValidationError({
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'A valid positive integer orderId is required in path parameter',
+      });
+    }
+
+    const user = (req as any).user;
+    const invoice = await invoiceService.getInvoiceByOrderId(orderId);
+    if (!invoice) {
+      throw new NotFoundError({
+        code: ERROR_CODES.NOT_FOUND,
+        message: 'Invoice not found for this order',
+      });
+    }
+
+    if (user.role === USER_ROLE.RETAILER && invoice.retailerId !== user.userId) {
+      throw new NotFoundError({
+        code: ERROR_CODES.NOT_FOUND,
+        message: 'Invoice not found',
+      });
+    }
+
+    if (user.role === USER_ROLE.DELIVERY) {
+      const orderRes = await query(
+        `SELECT delivery_partner_id FROM orders WHERE order_id = $1`,
+        [orderId]
+      );
+      if (orderRes.rowCount === 0 || orderRes.rows[0].delivery_partner_id !== user.userId) {
+        throw new NotFoundError({
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Invoice not found',
+        });
+      }
+    }
+
+    const { url, pdfBuffer } = await invoiceService.ensureInvoicePdf(invoice.invoiceId, 300);
+
+    if (pdfBuffer) {
+      const safeName = invoice.invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="Invoice-${safeName}.pdf"`);
+      return res.send(pdfBuffer);
+    }
+
+    return res.redirect(302, url);
+  }
+
+  /**
    * GET /api/v1/invoices/:invoiceId
    */
   async getInvoiceById(req: Request, res: Response) {
@@ -76,6 +178,19 @@ export class InvoiceController {
         code: ERROR_CODES.NOT_FOUND,
         message: 'Invoice not found',
       });
+    }
+
+    if (user.role === USER_ROLE.DELIVERY) {
+      const orderRes = await query(
+        `SELECT delivery_partner_id FROM orders WHERE order_id = $1`,
+        [invoice.orderId]
+      );
+      if (orderRes.rowCount === 0 || orderRes.rows[0].delivery_partner_id !== user.userId) {
+        throw new NotFoundError({
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Invoice not found',
+        });
+      }
     }
 
     return ok(res, {
@@ -107,6 +222,19 @@ export class InvoiceController {
         code: ERROR_CODES.NOT_FOUND,
         message: 'Invoice not found',
       });
+    }
+
+    if (user.role === USER_ROLE.DELIVERY) {
+      const orderRes = await query(
+        `SELECT delivery_partner_id FROM orders WHERE order_id = $1`,
+        [invoice.orderId]
+      );
+      if (orderRes.rowCount === 0 || orderRes.rows[0].delivery_partner_id !== user.userId) {
+        throw new NotFoundError({
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Invoice not found',
+        });
+      }
     }
 
     // Ensure PDF is generated and uploaded to Supabase Storage
@@ -145,6 +273,19 @@ export class InvoiceController {
         code: ERROR_CODES.NOT_FOUND,
         message: 'Invoice not found',
       });
+    }
+
+    if (user.role === USER_ROLE.DELIVERY) {
+      const orderRes = await query(
+        `SELECT delivery_partner_id FROM orders WHERE order_id = $1`,
+        [invoice.orderId]
+      );
+      if (orderRes.rowCount === 0 || orderRes.rows[0].delivery_partner_id !== user.userId) {
+        throw new NotFoundError({
+          code: ERROR_CODES.NOT_FOUND,
+          message: 'Invoice not found',
+        });
+      }
     }
 
     const { url, pdfBuffer } = await invoiceService.ensureInvoicePdf(invoiceId, 300);

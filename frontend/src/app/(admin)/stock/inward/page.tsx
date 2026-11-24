@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ScanConfirmForm } from '../../../../features/stock/components/ScanConfirmForm';
 import { CameraScannerModal } from '../../../../components/scan/CameraScannerModal';
 import { OcrScannerModal, type OcrCandidateResult } from '../../../../components/scan/OcrScannerModal';
@@ -10,13 +11,42 @@ import { parseBarcodePayload } from '../../../../lib/scanner/gs1Parser';
 import type { InwardStockFormData } from '../../../../features/stock/schema';
 import { Camera, FileText, PlusCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
-export default function StockInwardPage() {
+function StockInwardContent() {
+  const searchParams = useSearchParams();
+  const medIdParam = searchParams.get('medicineId');
+  const medNameParam = searchParams.get('medicineName');
+  const medCompanyParam = searchParams.get('medicineCompany');
+  const medGstParam = searchParams.get('gstRate');
+
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isOcrOpen, setIsOcrOpen] = useState(false);
-  const [formInitialValues, setFormInitialValues] = useState<Partial<InwardStockFormData>>({
+  const [formInitialValues, setFormInitialValues] = useState<Partial<InwardStockFormData>>(() => ({
     captureMethod: 'MANUAL',
-  });
-  const [scanStatusMessage, setScanStatusMessage] = useState<string | null>(null);
+    ...(medIdParam
+      ? {
+          medicineId: Number(medIdParam),
+          medicineName: medNameParam || '',
+          medicineCompany: medCompanyParam || '',
+          gstRate: medGstParam ? Number(medGstParam) : 12,
+        }
+      : {}),
+  }));
+  const [scanStatusMessage, setScanStatusMessage] = useState<string | null>(
+    medNameParam ? `✓ Selected created medicine: ${medNameParam}` : null
+  );
+
+  useEffect(() => {
+    if (medIdParam) {
+      setFormInitialValues((prev) => ({
+        ...prev,
+        medicineId: Number(medIdParam),
+        medicineName: medNameParam || '',
+        medicineCompany: medCompanyParam || '',
+        gstRate: medGstParam ? Number(medGstParam) : 12,
+      }));
+      setScanStatusMessage(`✓ Selected created medicine: ${medNameParam}`);
+    }
+  }, [medIdParam, medNameParam, medCompanyParam, medGstParam]);
 
   const resolveScanMutation = useResolveScan();
 
@@ -285,5 +315,13 @@ export default function StockInwardPage() {
         onCandidatesDetected={handleOcrCandidatesDetected}
       />
     </div>
+  );
+}
+
+export default function StockInwardPage() {
+  return (
+    <Suspense fallback={<div className="max-w-4xl mx-auto py-8 px-4 text-sm text-slate-500">Loading Stock Inward Hub...</div>}>
+      <StockInwardContent />
+    </Suspense>
   );
 }

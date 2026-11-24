@@ -640,12 +640,27 @@ export function OcrScannerModal({
           {errorMessage && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{errorMessage}</div>
+              <div className="flex-1 leading-relaxed">
+                <p>{errorMessage}</p>
+                {imagePreviewUrl && (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void processImageWithOcr(imagePreviewUrl)}
+                      disabled={isProcessing}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-700 hover:bg-rose-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+                      Re-parse Text from Image
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* Extracted Candidates Summary Card with Direct Inline Editing */}
-          {(hasAnyCandidate || rawText) && (
+          {(hasAnyCandidate || rawText || Boolean(imagePreviewUrl)) && (
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -720,16 +735,33 @@ export function OcrScannerModal({
                   <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-slate-500" /> Raw Recognized Text
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const parsed = parsePackText(rawText);
-                      setCandidates(parsed);
-                    }}
-                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3 h-3" /> Re-parse Text
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {imagePreviewUrl && (
+                      <button
+                        type="button"
+                        onClick={() => void processImageWithOcr(imagePreviewUrl)}
+                        disabled={isProcessing}
+                        className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} /> Re-scan Image
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (imagePreviewUrl && !rawText.trim()) {
+                          void processImageWithOcr(imagePreviewUrl);
+                        } else {
+                          const parsed = parsePackText(rawText);
+                          setCandidates(parsed);
+                        }
+                      }}
+                      disabled={isProcessing}
+                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} /> Re-parse Text
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   rows={3}

@@ -20,6 +20,25 @@ interface InvoiceDetailModalProps {
   isAdmin?: boolean;
 }
 
+function formatCleanDate(isoString?: string | null) {
+  if (!isoString) return '';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    });
+  } catch {
+    return isoString;
+  }
+}
+
 export function InvoiceDetailModal({
   invoiceId,
   isOpen,
@@ -172,15 +191,15 @@ export function InvoiceDetailModal({
       ) : invoice ? (
         <div className="space-y-6">
           {/* Top Bar: Order Reference & PDF Download */}
-          <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="min-w-0 flex-1">
               <span className="text-xs text-slate-500 font-medium">Order Reference:</span>
-              <p className="text-sm font-bold text-slate-900">{invoice.orderNumber}</p>
-              <span className="text-xs text-slate-400">
-                Generated: {new Date(invoice.generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-              </span>
+              <p className="text-sm font-bold text-slate-900 truncate">{invoice.orderNumber}</p>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
+                Generated: {formatCleanDate(invoice.generatedAt)}
+              </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <Button
                 variant="primary"
                 size="sm"

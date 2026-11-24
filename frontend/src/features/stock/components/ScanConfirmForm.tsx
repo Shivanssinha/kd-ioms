@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { inwardStockFormSchema, type InwardStockFormData } from '../schema';
@@ -22,9 +23,11 @@ export function ScanConfirmForm({
   onSuccess,
   onReset,
 }: ScanConfirmFormProps) {
+  const router = useRouter();
   const [selectedMedicine, setSelectedMedicine] = useState<MedicineRecord | null>(null);
   const [inwardSuccess, setInwardSuccess] = useState<InwardStockResult | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [today, setToday] = useState('');
 
   useEffect(() => {
@@ -59,6 +62,58 @@ export function ScanConfirmForm({
   });
 
   const inwardMutation = useInwardStock();
+
+  // Load draft from localStorage on initial render if present
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('kd_stock_inward_draft');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          const hasSignificantData = Boolean(
+            parsed.batchNumber ||
+              parsed.expiryDate ||
+              parsed.mrp ||
+              parsed.sellingPrice ||
+              (parsed.quantity && parsed.quantity > 1) ||
+              parsed.supplierName ||
+              parsed.medicineName
+          );
+
+          if (hasSignificantData) {
+            if (!initialValues?.batchNumber && parsed.batchNumber) setValue('batchNumber', parsed.batchNumber);
+            if (!initialValues?.expiryDate && parsed.expiryDate) setValue('expiryDate', parsed.expiryDate);
+            if (!initialValues?.mrp && parsed.mrp) setValue('mrp', parsed.mrp);
+            if (!initialValues?.sellingPrice && parsed.sellingPrice) setValue('sellingPrice', parsed.sellingPrice);
+            if (!initialValues?.purchaseRate && parsed.purchaseRate) setValue('purchaseRate', parsed.purchaseRate);
+            if (!initialValues?.quantity && parsed.quantity) setValue('quantity', parsed.quantity);
+            if (!initialValues?.supplierName && parsed.supplierName) setValue('supplierName', parsed.supplierName);
+            if (!initialValues?.gtin && parsed.gtin) setValue('gtin', parsed.gtin);
+            if (!initialValues?.medicineName && parsed.medicineName) setValue('medicineName', parsed.medicineName);
+            if (!initialValues?.medicineCompany && parsed.medicineCompany) setValue('medicineCompany', parsed.medicineCompany);
+            if (!initialValues?.medicineId && parsed.medicineId) setValue('medicineId', parsed.medicineId);
+
+            setDraftRestored(true);
+          }
+        }
+      }
+    } catch {
+      // ignore localStorage / JSON parse error
+    }
+  }, [initialValues, setValue]);
+
+  // Continuously persist form state to draft in localStorage
+  useEffect(() => {
+    const subscription = watch((values) => {
+      if (!values) return;
+      try {
+        localStorage.setItem('kd_stock_inward_draft', JSON.stringify(values));
+      } catch {
+        // ignore storage errors
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch]);
 
   // Keep form updated when initialValues change from external scan
   useEffect(() => {
@@ -127,6 +182,48 @@ export function ScanConfirmForm({
     setValue('gstRate', parseFloat(medicine.gstRate) || 12);
   };
 
+  const handleCreateNewMedicine = (medicineName: string) => {
+    const currentValues = watch();
+    try {
+      localStorage.setItem(
+        'kd_stock_inward_draft',
+        JSON.stringify({
+          ...currentValues,
+          medicineName,
+        })
+      );
+    } catch {
+      // ignore
+    }
+    router.push(`/medicines/new?fromInward=true&name=${encodeURIComponent(medicineName)}`);
+  };
+
+  const handleDiscardDraft = () => {
+    try {
+      localStorage.removeItem('kd_stock_inward_draft');
+    } catch {
+      // ignore
+    }
+    setDraftRestored(false);
+    reset({
+      medicineId: 0,
+      medicineName: '',
+      medicineCompany: '',
+      gstRate: 12,
+      batchNumber: '',
+      expiryDate: '',
+      mrp: '',
+      sellingPrice: '',
+      purchaseRate: '0.00',
+      quantity: 1,
+      supplierName: '',
+      gtin: '',
+      qrPayload: '',
+      captureMethod: 'MANUAL',
+    });
+    setSelectedMedicine(null);
+  };
+
   const onSubmit = async (data: InwardStockFormData) => {
     setFormError(null);
     try {
@@ -144,6 +241,12 @@ export function ScanConfirmForm({
         captureMethod: data.captureMethod,
       });
 
+      try {
+        localStorage.removeItem('kd_stock_inward_draft');
+      } catch {
+        // ignore
+      }
+
       setInwardSuccess(response.data);
       if (onSuccess) {
         onSuccess(response.data);
@@ -154,6 +257,11 @@ export function ScanConfirmForm({
   };
 
   const handleReceiveAnother = () => {
+    try {
+      localStorage.removeItem('kd_stock_inward_draft');
+    } catch {
+      // ignore
+    }
     setInwardSuccess(null);
     setSelectedMedicine(null);
     setFormError(null);
@@ -231,6 +339,25 @@ export function ScanConfirmForm({
         </div>
       )}
 
+      {/* Restored Draft Banner */}
+      {draftRestored && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Draft Restored:</strong> Your in-progress batch and pricing details have been recovered.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleDiscardDraft}
+            className="text-xs text-amber-700 hover:text-amber-900 font-bold hover:underline shrink-0 ml-2"
+          >
+            Discard Draft
+          </button>
+        </div>
+      )}
+
       {/* Capture Mode Indicator */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-100">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -279,7 +406,11 @@ export function ScanConfirmForm({
           </div>
         ) : (
           <div>
-            <MedicineSearch onSelect={handleMedicineSelect} placeholder="Search medicine to link..." />
+            <MedicineSearch
+              onSelect={handleMedicineSelect}
+              onCreateNew={handleCreateNewMedicine}
+              placeholder="Search medicine to link..."
+            />
             {errors.medicineId && (
               <p className="text-xs text-red-600 mt-1">{errors.medicineId.message}</p>
             )}

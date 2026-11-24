@@ -455,6 +455,46 @@ export function OrderDetailView({ orderId }: OrderDetailViewProps) {
         </div>
       )}
 
+      {/* Active Out For Delivery Hero Alert with Delivery Boy Contact */}
+      {order.status === 'OUT_FOR_DELIVERY' && order.deliveryPartner && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-2 border-blue-300 dark:border-blue-700 rounded-2xl p-4 sm:p-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Truck className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] uppercase font-black tracking-wider text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/60 px-2.5 py-0.5 rounded-full">
+                  Out For Delivery
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Your order is on the way!
+                </span>
+              </div>
+              <p className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mt-1">
+                Assigned Delivery Partner: <span className="text-blue-600 dark:text-blue-400">{order.deliveryPartner.username}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 sm:self-center shrink-0">
+            {order.deliveryPartner.phone ? (
+              <a
+                href={`tel:${order.deliveryPartner.phone}`}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-md hover:scale-[1.02]"
+              >
+                <Phone className="w-4 h-4" />
+                Call Partner: {order.deliveryPartner.phone}
+              </a>
+            ) : (
+              <span className="text-xs font-semibold text-slate-500 bg-white/80 dark:bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                Phone: Not Available
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Order Header Summary */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>

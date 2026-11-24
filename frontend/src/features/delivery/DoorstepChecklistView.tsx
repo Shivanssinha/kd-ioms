@@ -20,6 +20,7 @@ import {
   Undo2,
   Info,
   Calendar,
+  FileText,
 } from 'lucide-react';
 import {
   useDeliveryOrderDetail,
@@ -362,6 +363,19 @@ export function DoorstepChecklistView({ orderId }: DoorstepChecklistViewProps) {
               <p className="mt-1 font-semibold text-rose-700 dark:text-rose-300">
                 Reason: {order.rejectionReason}
               </p>
+            )}
+            {isDelivered && (
+              <div className="pt-2">
+                <a
+                  href={`/api/v1/invoices/by-order/${order.orderId}/download`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>View / Download Tax Invoice</span>
+                </a>
+              </div>
             )}
           </div>
         </div>

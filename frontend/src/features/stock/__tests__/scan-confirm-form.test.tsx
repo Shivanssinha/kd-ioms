@@ -5,6 +5,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ScanConfirmForm } from '../components/ScanConfirmForm';
 import * as stockApi from '../api';
 
+const mockPush = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+}));
+
 describe('ScanConfirmForm Component', () => {
   let queryClient: QueryClient;
 

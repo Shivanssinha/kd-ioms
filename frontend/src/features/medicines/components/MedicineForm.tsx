@@ -32,7 +32,7 @@ export function MedicineForm({ initialData, onSubmit, isLoading = false }: Medic
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorRef, setErrorRef] = useState<string | undefined>(undefined);
 
-  const isEdit = Boolean(initialData);
+  const isEdit = Boolean(initialData && 'medicineId' in initialData && (initialData as MedicineRecord).medicineId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
