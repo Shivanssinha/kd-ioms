@@ -3,7 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { OrderBatchScannerModal } from '../components/OrderBatchScannerModal';
 import type { ItemPickSuggestion, BatchPickSuggestion } from '../../../lib/api/orders.api';
-import * as ordersApi from '../../../lib/api/orders.api';
+import * as stockApi from '../../../features/stock/api';
+
+vi.mock('../../../features/stock/api', () => ({
+  extractPackagingOcr: vi.fn(),
+}));
 
 describe('OrderBatchScannerModal Component', () => {
   const sampleBatch: BatchPickSuggestion = {
@@ -50,9 +54,10 @@ describe('OrderBatchScannerModal Component', () => {
 
     expect(screen.getByText(/Scan & Deduct Batch Quantity/)).toBeDefined();
     expect(screen.getAllByText(/ORD-2026-0001/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Barcode \/ Gun \/ Manual/)).toBeDefined();
-    expect(screen.getByText(/Camera Scanner/)).toBeDefined();
-    expect(screen.getByText(/Order Items List/)).toBeDefined();
+    expect(screen.getByText(/Barcode \/ Gun/)).toBeDefined();
+    expect(screen.getByText(/Barcode Cam/)).toBeDefined();
+    expect(screen.getByText(/AI Pack OCR/)).toBeDefined();
+    expect(screen.getByText(/Order Items/)).toBeDefined();
   });
 
   it('allows browsing order items and selecting a batch to deduct', async () => {
@@ -68,8 +73,8 @@ describe('OrderBatchScannerModal Component', () => {
       />
     );
 
-    // Switch to Order Items List tab
-    const browseTab = screen.getByText('Order Items List');
+    // Switch to Order Items tab
+    const browseTab = screen.getByText('Order Items');
     fireEvent.click(browseTab);
 
     // Click the batch button
@@ -128,6 +133,78 @@ describe('OrderBatchScannerModal Component', () => {
       expect.objectContaining({ batchId: 10, batchNumber: 'AUG-B101' }),
       3,
       'SCAN_GUN',
+      'AUG-B101'
+    );
+  });
+
+  it('scans packaging photo via Gemini Vision OCR, matches order batch, and allows allocation', async () => {
+    const handleDeduct = vi.fn();
+    vi.mocked(stockApi.extractPackagingOcr).mockResolvedValueOnce({
+      success: true,
+      code: 'SCAN_OCR_PROCESSED',
+      message: 'OCR extracted',
+      data: {
+        batchNumber: 'AUG-B101',
+        expiryDate: '2027-12-31',
+        mrp: 100,
+        rawText: 'B.No. AUG-B101 EXP 12/2027 MRP 100.00',
+        source: 'gemini',
+      },
+      meta: {
+        requestId: 'req_test_123',
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    render(
+      <OrderBatchScannerModal
+        isOpen={true}
+        onClose={vi.fn()}
+        orderNumber="ORD-2026-0001"
+        items={[sampleItem]}
+        allocations={{}}
+        onDeductBatch={handleDeduct}
+      />
+    );
+
+    // Switch to AI Pack OCR tab
+    const ocrTab = screen.getByText('AI Pack OCR');
+    fireEvent.click(ocrTab);
+
+    // Simulate uploading a photo
+    const file = new File(['fake-image'], 'blister-pack.jpg', { type: 'image/jpeg' });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).not.toBeNull();
+
+    // Trigger file change
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // Verify Gemini Vision extracted match banner appears
+    await waitFor(() => {
+      expect(screen.getByText(/Matched in Order: Augmentin 625 Duo/i)).toBeDefined();
+    });
+
+    // Check candidate cards render
+    expect(screen.getAllByText('AUG-B101').length).toBeGreaterThan(0);
+    expect(screen.getByText('2027-12-31')).toBeDefined();
+    expect(screen.getByText('₹100')).toBeDefined();
+
+    // Click Allocate button on matched batch banner
+    const allocateBtn = screen.getByRole('button', { name: /Allocate/i });
+    fireEvent.click(allocateBtn);
+
+    // Should transition to deduction quantity screen (Step 2)
+    expect(await screen.findByText('Quantity to Deduct & Allocate')).toBeDefined();
+
+    // Confirm deduction
+    const deductButton = screen.getByRole('button', { name: /Deduct & Allocate 5 Unit\(s\)/i });
+    fireEvent.click(deductButton);
+
+    expect(handleDeduct).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ batchId: 10, batchNumber: 'AUG-B101' }),
+      5,
+      'SCAN_CAMERA',
       'AUG-B101'
     );
   });

@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { resolveScan, type ItemPickSuggestion, type BatchPickSuggestion } from '../../../lib/api/orders.api';
 import { type PickedAllocation, playChime } from '../hooks/useOrderPicking';
+import { extractPackagingOcr } from '../../stock/api';
+import { parsePackText, type ParsedPackTextResult } from '../../../lib/scan/parse-pack-text';
 
 export interface OrderBatchScannerModalProps {
   isOpen: boolean;
@@ -72,7 +74,7 @@ export function OrderBatchScannerModal({
   initialMedicineId,
   onDeductBatch,
 }: OrderBatchScannerModalProps) {
-  const [activeTab, setActiveTab] = useState<'gun' | 'camera' | 'browse'>('gun');
+  const [activeTab, setActiveTab] = useState<'gun' | 'camera' | 'ocr' | 'browse'>('gun');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [isResolving, setIsResolving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -82,14 +84,32 @@ export function OrderBatchScannerModal({
   const [resolvedContext, setResolvedContext] = useState<ResolvedBatchContext | null>(null);
   const [deductionQty, setDeductionQty] = useState<number>(1);
 
-  // Camera state
+  // Camera state (Barcode detector)
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Stop camera helper
+  // AI Packaging OCR state
+  const [ocrImagePreview, setOcrImagePreview] = useState<string | null>(null);
+  const [isOcrProcessing, setIsOcrProcessing] = useState<boolean>(false);
+  const [ocrStatus, setOcrStatus] = useState<string>('');
+  const [ocrProgress, setOcrProgress] = useState<number>(0);
+  const [ocrCandidates, setOcrCandidates] = useState<ParsedPackTextResult | null>(null);
+  const [ocrSource, setOcrSource] = useState<'gemini' | 'local' | null>(null);
+  const [, setOcrRawText] = useState<string>('');
+  const [ocrErrorMessage, setOcrErrorMessage] = useState<string | null>(null);
+  const [ocrMatchedBatch, setOcrMatchedBatch] = useState<{
+    item: ItemPickSuggestion;
+    batch: BatchPickSuggestion;
+  } | null>(null);
+  const ocrVideoRef = useRef<HTMLVideoElement | null>(null);
+  const ocrStreamRef = useRef<MediaStream | null>(null);
+  const ocrFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isOcrCameraActive, setIsOcrCameraActive] = useState<boolean>(false);
+
+  // Stop barcode camera helper
   const stopCamera = useCallback(() => {
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
@@ -101,6 +121,54 @@ export function OrderBatchScannerModal({
     }
   }, []);
 
+  // Stop OCR camera helper
+  const stopOcrCamera = useCallback(() => {
+    if (ocrStreamRef.current) {
+      ocrStreamRef.current.getTracks().forEach((track) => track.stop());
+      ocrStreamRef.current = null;
+    }
+    if (ocrVideoRef.current) {
+      ocrVideoRef.current.srcObject = null;
+    }
+    setIsOcrCameraActive(false);
+  }, []);
+
+  // Start OCR camera stream
+  const startOcrCamera = useCallback(async () => {
+    setOcrErrorMessage(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setOcrErrorMessage('Camera access is not supported by your browser.');
+      return;
+    }
+
+    try {
+      stopOcrCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      ocrStreamRef.current = stream;
+      if (ocrVideoRef.current) {
+        ocrVideoRef.current.srcObject = stream;
+        await ocrVideoRef.current.play();
+        setIsOcrCameraActive(true);
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      if (error.name === 'NotAllowedError') {
+        setOcrErrorMessage('Camera permission was denied. Please allow camera access in browser settings.');
+      } else {
+        setOcrErrorMessage(`Camera error: ${error.message || 'Unable to start camera'}`);
+      }
+      setIsOcrCameraActive(false);
+    }
+  }, [stopOcrCamera]);
+
   // Reset modal state on open/close
   useEffect(() => {
     if (isOpen) {
@@ -108,6 +176,11 @@ export function OrderBatchScannerModal({
       setSuccessInfo(null);
       setResolvedContext(null);
       setBarcodeInput('');
+      setOcrImagePreview(null);
+      setOcrCandidates(null);
+      setOcrMatchedBatch(null);
+      setOcrErrorMessage(null);
+      setIsOcrProcessing(false);
       // If initialMedicineId passed, switch to browse or pre-filter
       if (initialMedicineId) {
         const found = items.find((i) => i.medicineId === initialMedicineId);
@@ -125,8 +198,9 @@ export function OrderBatchScannerModal({
       }, 100);
     } else {
       stopCamera();
+      stopOcrCamera();
     }
-  }, [isOpen, initialMedicineId, items, stopCamera]);
+  }, [isOpen, initialMedicineId, items, stopCamera, stopOcrCamera]);
 
   // Handle batch selection directly (from browse or suggestion)
   const selectBatchDirectly = useCallback(
@@ -257,6 +331,193 @@ export function OrderBatchScannerModal({
       stopCamera();
     };
   }, [isOpen, activeTab, resolvedContext, stopCamera]);
+
+  // OCR Camera initialization
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function initOcrCamera() {
+      if (!isOpen || activeTab !== 'ocr' || resolvedContext || ocrImagePreview) {
+        stopOcrCamera();
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setOcrErrorMessage('Camera access is not supported by your browser.');
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        if (isCancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        ocrStreamRef.current = stream;
+        if (ocrVideoRef.current) {
+          ocrVideoRef.current.srcObject = stream;
+          await ocrVideoRef.current.play();
+          setIsOcrCameraActive(true);
+        }
+      } catch (err: unknown) {
+        if (isCancelled) return;
+        const error = err as Error;
+        if (error.name === 'NotAllowedError') {
+          setOcrErrorMessage('Camera permission was denied. Please allow camera access in browser settings.');
+        } else {
+          setOcrErrorMessage(`Camera error: ${error.message || 'Unable to access camera'}`);
+        }
+        setIsOcrCameraActive(false);
+      }
+    }
+
+    void initOcrCamera();
+
+    return () => {
+      isCancelled = true;
+      stopOcrCamera();
+    };
+  }, [isOpen, activeTab, resolvedContext, ocrImagePreview, stopOcrCamera]);
+
+  // Execute OCR analysis on packaging image
+  const processOcrImage = async (imageSource: string | File) => {
+    setIsOcrProcessing(true);
+    setOcrErrorMessage(null);
+    setOcrProgress(15);
+    setOcrSource(null);
+    setOcrMatchedBatch(null);
+    setOcrStatus('Scanning packaging with Gemini 1.5 Flash Vision AI...');
+
+    try {
+      let dataUrl: string;
+      if (typeof imageSource === 'string') {
+        dataUrl = imageSource;
+      } else {
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(imageSource);
+        });
+      }
+      setOcrImagePreview(dataUrl);
+
+      // Attempt Gemini Vision first
+      let detectedBatch: string | undefined;
+      let detectedExpiry: string | undefined;
+      let detectedMrp: string | undefined;
+      let detectedRawText: string = '';
+      let sourceUsed: 'gemini' | 'local' = 'gemini';
+
+      try {
+        setOcrProgress(40);
+        const geminiRes = await extractPackagingOcr({ imageBase64: dataUrl });
+        if (geminiRes.success && geminiRes.data?.source === 'gemini') {
+          detectedBatch = geminiRes.data.batchNumber || undefined;
+          detectedExpiry = geminiRes.data.expiryDate || undefined;
+          detectedMrp = geminiRes.data.mrp != null ? String(geminiRes.data.mrp) : undefined;
+          detectedRawText = geminiRes.data.rawText || '';
+          sourceUsed = 'gemini';
+        } else {
+          throw new Error('Gemini OCR returned incomplete payload');
+        }
+      } catch (geminiErr) {
+        console.warn('Gemini vision failed, attempting local fallback:', geminiErr);
+        setOcrStatus('Cloud vision unavailable, falling back to local OCR...');
+        setOcrProgress(60);
+
+        try {
+          const { createWorker } = await import('tesseract.js');
+          const worker = await createWorker('eng');
+          const ret = await worker.recognize(dataUrl);
+          await worker.terminate();
+
+          detectedRawText = ret.data.text || '';
+          const parsed = parsePackText(detectedRawText);
+          detectedBatch = parsed.batchNumber;
+          detectedExpiry = parsed.expiryDate;
+          detectedMrp = parsed.mrp;
+          sourceUsed = 'local';
+        } catch {
+          throw new Error('Could not extract text from packaging image.');
+        }
+      }
+
+      setOcrProgress(100);
+      setOcrSource(sourceUsed);
+      setOcrRawText(detectedRawText);
+      const parsedResult: ParsedPackTextResult = {
+        batchNumber: detectedBatch,
+        expiryDate: detectedExpiry,
+        mrp: detectedMrp,
+      };
+      setOcrCandidates(parsedResult);
+
+      // Check if detected batch matches any batch in the current order items
+      if (detectedBatch) {
+        const cleanDetected = detectedBatch.toLowerCase().trim();
+        let matchFound = false;
+
+        for (const item of items) {
+          const batches = item.batches || (item as any).suggestions || [];
+          const matched = batches.find(
+            (b: BatchPickSuggestion) => b.batchNumber.toLowerCase().trim() === cleanDetected
+          );
+          if (matched) {
+            setOcrMatchedBatch({ item, batch: matched });
+            playChime('success');
+            matchFound = true;
+            break;
+          }
+        }
+
+        if (!matchFound) {
+          playChime('error');
+        }
+      } else {
+        setOcrErrorMessage('Could not clearly detect batch number from photo. You can enter or search manually.');
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      setOcrErrorMessage(error.message || 'Failed to process packaging photo.');
+      playChime('error');
+    } finally {
+      setIsOcrProcessing(false);
+      stopOcrCamera();
+    }
+  };
+
+  const handleSnapOcrPhoto = () => {
+    if (!ocrVideoRef.current) return;
+    const video = ocrVideoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    void processOcrImage(dataUrl);
+  };
+
+  const handleOcrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      void processOcrImage(file);
+    }
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
 
   // Code resolution logic (handles barcode, GTIN, batch number)
   const handleResolveCode = async (
@@ -717,7 +978,7 @@ export function OrderBatchScannerModal({
                   }`}
                 >
                   <Scan className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Barcode / Gun / Manual</span>
+                  <span>Barcode / Gun</span>
                 </button>
                 <button
                   type="button"
@@ -729,7 +990,19 @@ export function OrderBatchScannerModal({
                   }`}
                 >
                   <Camera className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Camera Scanner</span>
+                  <span>Barcode Cam</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ocr')}
+                  className={`flex-1 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                    activeTab === 'ocr'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>AI Pack OCR</span>
                 </button>
                 <button
                   type="button"
@@ -741,7 +1014,7 @@ export function OrderBatchScannerModal({
                   }`}
                 >
                   <Package className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Order Items List</span>
+                  <span>Order Items</span>
                 </button>
               </div>
 
@@ -845,7 +1118,204 @@ export function OrderBatchScannerModal({
                 </div>
               )}
 
-              {/* TAB 3: ORDER ITEMS LIST (QUICK SELECT) */}
+              {/* TAB 3: AI PACKAGING OCR */}
+              {activeTab === 'ocr' && (
+                <div className="space-y-4">
+                  {/* Viewfinder or Image Preview */}
+                  <div className="relative aspect-video max-h-[300px] w-full bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-800 shadow-inner">
+                    {ocrImagePreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={ocrImagePreview}
+                        alt="Captured medicine packaging"
+                        className="w-full h-full object-contain bg-slate-950"
+                      />
+                    ) : (
+                      <video
+                        ref={ocrVideoRef}
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+
+                    {/* Viewfinder Target if live camera */}
+                    {!ocrImagePreview && !ocrErrorMessage && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-64 h-32 border-2 border-emerald-400 rounded-xl relative">
+                          <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-500 -mt-1 -ml-1 rounded-tl" />
+                          <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-emerald-500 -mt-1 -mr-1 rounded-tr" />
+                          <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-emerald-500 -mb-1 -ml-1 rounded-bl" />
+                          <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-emerald-500 -mb-1 -mr-1 rounded-br" />
+                          <div className="w-full h-0.5 bg-emerald-400/80 animate-pulse absolute top-1/2 -translate-y-1/2" />
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-emerald-300 font-bold whitespace-nowrap bg-black/60 px-2 py-0.5 rounded">
+                            Align Batch / Expiry / MRP Here
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* OCR Processing Overlay */}
+                    {isOcrProcessing && (
+                      <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center text-white space-y-3 z-20">
+                        <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
+                        <div className="space-y-1 max-w-xs">
+                          <p className="text-xs font-bold text-white">{ocrStatus}</p>
+                          <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden mx-auto">
+                            <div
+                              className="h-full bg-emerald-500 transition-all duration-300"
+                              style={{ width: `${ocrProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error Banner in Video Frame */}
+                    {ocrErrorMessage && !isOcrProcessing && (
+                      <div className="absolute inset-0 bg-slate-950/80 p-4 flex flex-col items-center justify-center text-center text-white space-y-2 z-10">
+                        <AlertCircle className="w-8 h-8 text-rose-500" />
+                        <p className="text-xs text-rose-300 font-semibold">{ocrErrorMessage}</p>
+                      </div>
+                    )}
+
+                    {/* Source Pill Badge */}
+                    {ocrSource && !isOcrProcessing && (
+                      <div className="absolute top-3 right-3 z-10">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold shadow-md ${
+                            ocrSource === 'gemini'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-amber-600 text-white'
+                          }`}
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          {ocrSource === 'gemini' ? 'Gemini 1.5 Flash Vision' : 'Local OCR Fallback'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Camera Controls & Capture Buttons */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {ocrImagePreview ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOcrImagePreview(null);
+                          setOcrCandidates(null);
+                          setOcrMatchedBatch(null);
+                          setOcrErrorMessage(null);
+                          void startOcrCamera();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition-colors shadow-sm"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retake / Scan Another Pack</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSnapOcrPhoto}
+                        disabled={isOcrProcessing || !isOcrCameraActive}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Snap & Read Pack</span>
+                      </button>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 transition-colors shadow-sm">
+                        <Upload className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Upload Pack Photo</span>
+                        <input
+                          ref={ocrFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleOcrFileUpload}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Matched Batch Banner or Candidate Cards */}
+                  {ocrMatchedBatch && (
+                    <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-2xl flex items-center justify-between shadow-sm">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Matched in Order: {ocrMatchedBatch.item.medicineName}</span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          Batch: <span className="font-mono font-bold">{ocrMatchedBatch.batch.batchNumber}</span> • Available Stock: {ocrMatchedBatch.batch.quantityOnHand} units
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectBatchDirectly(
+                            ocrMatchedBatch.item,
+                            ocrMatchedBatch.batch,
+                            'SCAN_CAMERA',
+                            ocrMatchedBatch.batch.batchNumber
+                          )
+                        }
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all"
+                      >
+                        <span>Allocate</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {ocrCandidates && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                        Extracted Packaging Candidates
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Batch No</span>
+                          <span className="text-xs font-mono font-bold text-slate-900 dark:text-white truncate block">
+                            {ocrCandidates.batchNumber || '—'}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                          <span className="text-[10px] text-slate-400 block font-semibold">Expiry</span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
+                            {ocrCandidates.expiryDate || '—'}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                          <span className="text-[10px] text-slate-400 block font-semibold">MRP</span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
+                            {ocrCandidates.mrp ? `₹${ocrCandidates.mrp}` : '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {ocrCandidates.batchNumber && !ocrMatchedBatch && (
+                        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between text-xs">
+                          <span className="text-amber-800 dark:text-amber-300 font-medium">
+                            Batch &ldquo;{ocrCandidates.batchNumber}&rdquo; not pre-suggested in this order.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleResolveCode(ocrCandidates.batchNumber!, 'SCAN_CAMERA')}
+                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition-colors shrink-0"
+                          >
+                            Resolve Batch
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: ORDER ITEMS LIST (QUICK SELECT) */}
               {activeTab === 'browse' && (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-500">
