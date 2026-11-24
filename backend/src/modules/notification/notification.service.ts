@@ -22,7 +22,7 @@ export class NotificationService {
   ): Promise<NotificationLogRecord[]> {
     const invRes = await query(
       `SELECT
-         i.invoice_id,whatsapp_number
+         i.invoice_id,
          i.invoice_number,
          i.total,
          i.pdf_path,
