@@ -17,6 +17,8 @@ pnpm-debug.log*
 pids/
 *.pid
 *.pid.lock
+uploads/
+!uploads/**/.gitkeep
 
 # Test coverage
 coverage/

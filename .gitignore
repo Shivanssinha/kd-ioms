@@ -21,6 +21,13 @@ lerna-debug.log*
 .next/
 out/
 
+# Test output
+test-results/
+playwright-report/
+
+# Uploads
+uploads/
+
 # TypeScript / build output
 dist/
 build/

@@ -26,7 +26,7 @@ describe('Auth & Authorization Middlewares', () => {
   });
 
   describe('authenticate', () => {
-    it('throws AUTH_REQUIRED when Authorization header is absent', async () => {
+    it('throws AUTH_REQUIRED when Authorization header is absent and no accessToken cookie exists', async () => {
       await expect(authenticate(mockReq as Request, mockRes as Response, mockNext)).rejects.toThrow(
         AppError
       );
@@ -38,6 +38,39 @@ describe('Auth & Authorization Middlewares', () => {
         expect(appErr.code).toBe(ERROR_CODES.AUTH_REQUIRED);
         expect(appErr.httpStatus).toBe(401);
       }
+    });
+
+    it('authenticates via req.cookies.accessToken when Authorization header is absent', async () => {
+      mockReq.headers = {};
+      mockReq.cookies = { accessToken: 'cookie-jwt' };
+      vi.spyOn(tokens, 'verifyAccessToken').mockReturnValue({
+        sub: 'mock-user-id',
+        username: 'testuser',
+        role: 'ADMIN',
+        phone: '9876543210',
+        mustChangePassword: false,
+      });
+
+      vi.spyOn(db, 'query').mockResolvedValue({
+        rows: [
+          {
+            id: 'mock-user-id',
+            username: 'testuser',
+            role: 'ADMIN',
+            phone: '9876543210',
+            is_active: true,
+            must_change_password: false,
+          },
+        ],
+        rowCount: 1,
+        command: '',
+        oid: 0,
+        fields: [],
+      });
+
+      await authenticate(mockReq as Request, mockRes as Response, mockNext);
+      expect(mockNext).toHaveBeenCalledWith();
+      expect(mockReq.user?.userId).toBe('mock-user-id');
     });
 
     it('throws AUTH_TOKEN_INVALID when user not found in database', async () => {

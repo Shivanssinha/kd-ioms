@@ -61,6 +61,47 @@ describe('parsePackText Heuristics', () => {
     expect(result.mrp).toBe('55.75');
   });
 
+  it('handles noisy OCR with spaced letters and "8.No." artifact', () => {
+    const noisyText = `
+      8.No. K-891
+      MFD. 01/24
+      EXP.DT. 06/2027
+      M . R . P . Rs . 350 , 50
+    `;
+
+    const result = parsePackText(noisyText);
+    expect(result.batchNumber).toBe('K-891');
+    expect(result.expiryDate).toBe('2027-06-30');
+    expect(result.mrp).toBe('350.50');
+  });
+
+  it('handles slash-dash MRP format (145/-) and short "ED" notation', () => {
+    const blisterText = `
+      BN: B1049
+      MD: 02/24
+      ED: 05/28
+      MRP: 145/-
+    `;
+
+    const result = parsePackText(blisterText);
+    expect(result.batchNumber).toBe('B1049');
+    expect(result.expiryDate).toBe('2028-05-31');
+    expect(result.mrp).toBe('145.00');
+  });
+
+  it('handles spaces around slashes in date (08 / 27)', () => {
+    const ocrText = `
+      Batch: AB402
+      EXP: 08 / 27
+      MRP Rs 99.00
+    `;
+
+    const result = parsePackText(ocrText);
+    expect(result.batchNumber).toBe('AB402');
+    expect(result.expiryDate).toBe('2027-08-31');
+    expect(result.mrp).toBe('99.00');
+  });
+
   it('handles empty or unparseable text gracefully without errors', () => {
     expect(parsePackText('')).toEqual({});
     expect(parsePackText('random hospital brochure text without medicine labels')).toEqual({});

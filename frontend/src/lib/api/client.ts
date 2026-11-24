@@ -63,6 +63,7 @@ export async function refreshAccessToken(): Promise<string | null> {
       const res = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
       });
 
       if (!res.ok) {
@@ -129,6 +130,7 @@ export async function apiFetch<T = unknown>(
   }
 
   let res = await fetch(url, {
+    credentials: 'include',
     ...restOptions,
     headers: reqHeaders,
   });
@@ -147,6 +149,7 @@ export async function apiFetch<T = unknown>(
         if (newToken) {
           reqHeaders['Authorization'] = `Bearer ${newToken}`;
           res = await fetch(url, {
+            credentials: 'include',
             ...restOptions,
             headers: reqHeaders,
           });

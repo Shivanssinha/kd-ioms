@@ -10,9 +10,16 @@ import type { UserRole } from '../enums/user-role.enum.js';
  * queries PostgreSQL to ensure the user account is active, and populates req.user.
  */
 export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  let token: string | undefined;
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.slice(7).trim();
+  } else if (req.cookies?.accessToken) {
+    token = req.cookies.accessToken;
+  }
+
+  if (!token) {
     throw new AppError({
       code: ERROR_CODES.AUTH_REQUIRED,
       httpStatus: 401,
@@ -20,7 +27,6 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     });
   }
 
-  const token = authHeader.slice(7).trim();
   const payload = verifyAccessToken(token);
 
   const result = await query(

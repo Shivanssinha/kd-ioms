@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { InvoiceDetailModal } from '../InvoiceDetailModal';
+import { ToastProvider } from '@/providers/ToastProvider';
 import * as invoiceApi from '@/lib/api/invoice.api';
 
 describe('InvoiceDetailModal', () => {
@@ -75,12 +76,14 @@ describe('InvoiceDetailModal', () => {
     });
 
     render(
-      <InvoiceDetailModal
-        invoiceId={1}
-        isOpen={true}
-        onClose={vi.fn()}
-        isAdmin={true}
-      />
+      <ToastProvider>
+        <InvoiceDetailModal
+          invoiceId={1}
+          isOpen={true}
+          onClose={vi.fn()}
+          isAdmin={true}
+        />
+      </ToastProvider>
     );
 
     await waitFor(() => {
@@ -95,12 +98,14 @@ describe('InvoiceDetailModal', () => {
 
   it('does not render modal when isOpen is false', () => {
     render(
-      <InvoiceDetailModal
-        invoiceId={1}
-        isOpen={false}
-        onClose={vi.fn()}
-        isAdmin={false}
-      />
+      <ToastProvider>
+        <InvoiceDetailModal
+          invoiceId={1}
+          isOpen={false}
+          onClose={vi.fn()}
+          isAdmin={false}
+        />
+      </ToastProvider>
     );
 
     expect(screen.queryByText('Invoice: INV/2026-27/00001')).toBeNull();

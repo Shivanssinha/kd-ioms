@@ -47,5 +47,15 @@ export const scanResolveSchema = {
     .strict(),
 };
 
+export const scanOcrSchema = {
+  body: z
+    .object({
+      imageBase64: z.string().min(1, { message: 'imageBase64 cannot be empty' }),
+      mimeType: z.string().optional().default('image/jpeg'),
+    })
+    .strict(),
+};
+
 export type InwardStockInput = z.infer<typeof inwardStockSchema.body>;
 export type ScanResolveInput = z.infer<typeof scanResolveSchema.body>;
+export type ScanOcrInput = z.infer<typeof scanOcrSchema.body>;

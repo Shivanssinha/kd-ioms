@@ -281,7 +281,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               </div>
               <button
                 type="button"
-                onClick={logout}
+                onClick={() => logout()}
                 className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 font-medium transition-colors"
               >
                 <LogOut className="h-4 w-4 shrink-0" />
@@ -298,7 +298,7 @@ function SidebarContent({ mobileOpen = false, onCloseMobile }: SidebarProps) {
               </div>
               <button
                 type="button"
-                onClick={logout}
+                onClick={() => logout()}
                 className="group relative p-2 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
                 title="Sign Out"
                 aria-label="Sign Out"

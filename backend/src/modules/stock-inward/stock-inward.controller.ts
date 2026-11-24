@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import { created, ok } from '../../utils/response.js';
 import * as stockInwardService from './stock-inward.service.js';
-import type { InwardStockInput, ScanResolveInput } from './stock-inward.validation.js';
+import * as geminiOcrService from './gemini-ocr.service.js';
+import type { InwardStockInput, ScanResolveInput, ScanOcrInput } from './stock-inward.validation.js';
 
 export async function handleInwardStock(req: Request, res: Response): Promise<void> {
   const payload = req.valid.body as InwardStockInput;
@@ -22,6 +23,17 @@ export async function handleResolveScan(req: Request, res: Response): Promise<vo
   ok(res, {
     code: 'SCAN_RESOLVED',
     message: 'Scan payload resolved successfully',
+    data: result,
+  });
+}
+
+export async function handleScanOcr(req: Request, res: Response): Promise<void> {
+  const { imageBase64, mimeType } = req.valid.body as ScanOcrInput;
+
+  const result = await geminiOcrService.extractPackagingWithGemini(imageBase64, mimeType);
+  ok(res, {
+    code: 'SCAN_OCR_PROCESSED',
+    message: result.source === 'gemini' ? 'Packaging scanned with Gemini 1.5 Flash' : 'Gemini AI unavailable or unconfigured',
     data: result,
   });
 }

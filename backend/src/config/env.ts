@@ -42,6 +42,7 @@ const envSchema = z.object({
   ADMIN_USERNAME: z.string().default('admin'),
   ADMIN_PASSWORD: z.string().min(10).default('Admin@KD2026!'),
   REFRESH_TOKEN_PEPPER: z.string().default('kd-ioms-refresh-pepper-2026'),
+  GEMINI_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

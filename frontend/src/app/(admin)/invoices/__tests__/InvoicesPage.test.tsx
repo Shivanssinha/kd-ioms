@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import AdminInvoicesPage from '../page';
+import { ToastProvider } from '@/providers/ToastProvider';
 import * as invoiceApi from '@/lib/api/invoice.api';
 
 describe('AdminInvoicesPage', () => {
@@ -41,7 +42,11 @@ describe('AdminInvoicesPage', () => {
       },
     });
 
-    render(<AdminInvoicesPage />);
+    render(
+      <ToastProvider>
+        <AdminInvoicesPage />
+      </ToastProvider>
+    );
 
     expect(screen.getByText('Wholesale Tax Invoices')).toBeDefined();
 
@@ -66,7 +71,11 @@ describe('AdminInvoicesPage', () => {
       },
     });
 
-    render(<AdminInvoicesPage />);
+    render(
+      <ToastProvider>
+        <AdminInvoicesPage />
+      </ToastProvider>
+    );
 
     await waitFor(() => {
       expect(screen.getByText('No Invoices Found')).toBeDefined();

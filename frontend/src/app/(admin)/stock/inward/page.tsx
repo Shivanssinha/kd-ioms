@@ -3,17 +3,16 @@
 import React, { useState } from 'react';
 import { ScanConfirmForm } from '../../../../features/stock/components/ScanConfirmForm';
 import { CameraScannerModal } from '../../../../components/scan/CameraScannerModal';
+import { OcrScannerModal, type OcrCandidateResult } from '../../../../components/scan/OcrScannerModal';
 import { useBarcodeScanner } from '../../../../hooks/useBarcodeScanner';
 import { useResolveScan } from '../../../../features/stock/hooks';
-import { parsePackText } from '../../../../lib/scan/parse-pack-text';
 import { parseBarcodePayload } from '../../../../lib/scanner/gs1Parser';
 import type { InwardStockFormData } from '../../../../features/stock/schema';
-import { Camera, FileText, PlusCircle, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Camera, FileText, PlusCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 export default function StockInwardPage() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isOcrOpen, setIsOcrOpen] = useState(false);
-  const [ocrRawText, setOcrRawText] = useState('');
   const [formInitialValues, setFormInitialValues] = useState<Partial<InwardStockFormData>>({
     captureMethod: 'MANUAL',
   });
@@ -129,23 +128,24 @@ export default function StockInwardPage() {
     },
   });
 
-  const handleApplyOcr = () => {
-    if (!ocrRawText.trim()) return;
-    const candidates = parsePackText(ocrRawText);
-
+  const handleOcrCandidatesDetected = (result: OcrCandidateResult) => {
     setFormInitialValues((prev) => ({
       ...prev,
       captureMethod: 'SCAN_OCR',
-      batchNumber: candidates.batchNumber || prev?.batchNumber,
-      expiryDate: candidates.expiryDate || prev?.expiryDate,
-      mrp: candidates.mrp || prev?.mrp,
+      batchNumber: result.batchNumber || prev?.batchNumber,
+      expiryDate: result.expiryDate || prev?.expiryDate,
+      mrp: result.mrp || prev?.mrp,
     }));
 
-    setIsOcrOpen(false);
+    const foundParts: string[] = [];
+    if (result.batchNumber) foundParts.push(`Batch ${result.batchNumber}`);
+    if (result.expiryDate) foundParts.push(`Exp ${result.expiryDate}`);
+    if (result.mrp) foundParts.push(`MRP ₹${result.mrp}`);
+
     setScanStatusMessage(
-      `OCR extracted candidates: ${candidates.batchNumber ? `Batch ${candidates.batchNumber}` : ''} ${
-        candidates.expiryDate ? `Exp ${candidates.expiryDate}` : ''
-      }`
+      foundParts.length > 0
+        ? `OCR recognized candidates: ${foundParts.join(' • ')}`
+        : 'OCR text captured and analyzed'
     );
   };
 
@@ -189,14 +189,14 @@ export default function StockInwardPage() {
         <button
           type="button"
           onClick={() => setIsOcrOpen(true)}
-          className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md transition-all text-left flex flex-col justify-between group"
+          className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md transition-all text-left flex flex-col justify-between group cursor-pointer"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <FileText className="w-5 h-5" />
+              <Camera className="w-5 h-5" />
             </div>
             <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-              Heuristics
+              Vision OCR
             </span>
           </div>
           <div>
@@ -204,7 +204,7 @@ export default function StockInwardPage() {
               Packaging Photo OCR
             </h3>
             <p className="text-xs text-slate-500 mt-1">
-              Paste carton text or photo OCR to auto-extract batch, expiry, and MRP.
+              Snap packaging photo or upload image to auto-extract batch, expiry, and MRP.
             </p>
           </div>
         </button>
@@ -278,63 +278,12 @@ export default function StockInwardPage() {
         }}
       />
 
-      {/* Packaging OCR Helper Modal */}
-      {isOcrOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-amber-600" />
-                Packaging OCR Text Heuristics
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsOcrOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                &times;
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <p className="text-xs text-slate-600">
-                Paste raw OCR output from mobile camera scans or pharma packaging strips:
-              </p>
-              <textarea
-                rows={5}
-                value={ocrRawText}
-                onChange={(e) => setOcrRawText(e.target.value)}
-                placeholder="e.g. B.No. A23910 EXP. 08/27 M.R.P. Rs. 145.50"
-                style={{ color: '#000000', WebkitTextFillColor: '#000000', colorScheme: 'light' }}
-                className="w-full p-3 text-xs bg-white text-black !text-black border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono placeholder:text-slate-400"
-              />
-              <div className="p-3 bg-slate-50 rounded-lg text-[11px] text-slate-500">
-                Recognizes: <code>B.No. / Batch / Lot</code>, <code>EXP / USE BEFORE (MM/YY or Month/Year)</code>, and <code>M.R.P. / Rs.</code>
-              </div>
-            </div>
-            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsOcrOpen(false)}
-                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyOcr}
-                disabled={!ocrRawText.trim()}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
-              >
-                Apply Candidates <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Packaging OCR Modal with Live Camera & Photo Upload */}
+      <OcrScannerModal
+        isOpen={isOcrOpen}
+        onClose={() => setIsOcrOpen(false)}
+        onCandidatesDetected={handleOcrCandidatesDetected}
+      />
     </div>
   );
 }

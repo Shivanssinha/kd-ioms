@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { inwardStock, resolveScan } from './api';
+import { inwardStock, resolveScan, extractPackagingOcr } from './api';
 import type { InwardStockPayload, ScanResolvePayload } from './types';
 
 export function useInwardStock() {
@@ -19,5 +19,12 @@ export function useInwardStock() {
 export function useResolveScan() {
   return useMutation({
     mutationFn: (payload: ScanResolvePayload) => resolveScan(payload),
+  });
+}
+
+export function usePackagingOcr() {
+  return useMutation({
+    mutationFn: (payload: { imageBase64: string; mimeType?: string }) =>
+      extractPackagingOcr(payload),
   });
 }

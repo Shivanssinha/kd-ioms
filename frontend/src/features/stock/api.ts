@@ -19,3 +19,22 @@ export async function resolveScan(payload: ScanResolvePayload): Promise<ApiRespo
     body: JSON.stringify(payload),
   });
 }
+
+export interface PackagingOcrResult {
+  source: 'gemini' | 'none';
+  batchNumber: string | null;
+  expiryDate: string | null;
+  mrp: number | null;
+  rawText: string;
+  error?: string;
+}
+
+export async function extractPackagingOcr(payload: {
+  imageBase64: string;
+  mimeType?: string;
+}): Promise<ApiResponse<PackagingOcrResult>> {
+  return apiFetch<PackagingOcrResult>('/stock/scan/ocr', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

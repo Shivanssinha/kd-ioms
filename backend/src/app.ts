@@ -36,9 +36,9 @@ app.use(
 // 4. Rate limiting
 app.use(generalLimiter);
 
-// 5. Body & cookie parsers
-app.use(express.json({ limit: '100kb' }));
-app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+// 5. Body & cookie parsers (10mb to allow vision packaging scan payloads)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser(env.COOKIE_SECRET));
 
 // 6. Static files (uploads fallback)
