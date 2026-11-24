@@ -3,7 +3,7 @@ import { toPaise, fromPaise, roundHalfUp, calculateGstAmount } from '../../utils
 import { todayIst, financialYearOf } from '../../utils/dates.js';
 import { env } from '../../config/env.js';
 import { uploadInvoicePdf, getInvoicePdfSignedUrl } from '../../utils/storage.js';
-import { buildInvoicePdf, type InvoicePdfLine } from './invoice.pdf.js';
+import { buildInvoicePdf, formatPdfDate, type InvoicePdfLine } from './invoice.pdf.js';
 import {
   InvoiceDto,
   InvoiceLineDto,
@@ -213,23 +213,14 @@ export class InvoiceService {
       invoiceNumber = `INV/${fy}/${String(Date.now()).slice(-5)}`;
     }
 
-    // 8. Format Dates for PDF
-    const formatDateDmY = (dStr: string | Date) => {
-      const d = new Date(dStr);
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}/${mm}/${yyyy}`;
-    };
-
-    // 9. Build and Upload PDF
+    // 8. Build and Upload PDF (clean DD/MM/YYYY date formatting in IST)
     let pdfPath: string | null = null;
     try {
       const pdfBuffer = await buildInvoicePdf({
         invoiceNumber,
-        invoiceDate: formatDateDmY(new Date()),
+        invoiceDate: formatPdfDate(new Date()),
         orderNumber: order.order_number,
-        orderDate: formatDateDmY(order.created_at),
+        orderDate: formatPdfDate(order.created_at),
         business: businessProfile,
         billedTo,
         lines: pdfLines,
@@ -537,15 +528,16 @@ export class InvoiceService {
    */
   async ensureInvoicePdf(
     invoiceId: number,
-    expiresInSeconds: number = 300
+    expiresInSeconds: number = 300,
+    forceRegenerate: boolean = false
   ): Promise<{ url: string; pdfPath: string; pdfBuffer?: Buffer }> {
     const invoice = await this.getInvoiceById(invoiceId);
 
     const bucketName = env.SUPABASE_STORAGE_BUCKET || 'invoices';
     const isSupabasePath = invoice.pdfPath && invoice.pdfPath.startsWith(`${bucketName}/`);
 
-    // If already in Supabase, test generating a signed URL and check access
-    if (isSupabasePath) {
+    // If already in Supabase and not forcing regeneration, test generating a signed URL and check access
+    if (isSupabasePath && !forceRegenerate) {
       try {
         const url = await getInvoicePdfSignedUrl(invoice.pdfPath!, expiresInSeconds);
         const checkRes = await fetch(url, { method: 'HEAD' });
@@ -568,14 +560,6 @@ export class InvoiceService {
       drugLicenseNumber: 'GJ-AHM-123456',
       phone: '+919876543210',
       email: 'billing@kandarpdrugs.com',
-    };
-
-    const formatDateDmY = (dStr: string | Date) => {
-      const d = new Date(dStr);
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}/${mm}/${yyyy}`;
     };
 
     const pdfLines: InvoicePdfLine[] = (invoice.lines || []).map((l, idx) => {
@@ -601,9 +585,9 @@ export class InvoiceService {
 
     const pdfBuffer = await buildInvoicePdf({
       invoiceNumber: invoice.invoiceNumber,
-      invoiceDate: formatDateDmY(invoice.generatedAt),
+      invoiceDate: formatPdfDate(invoice.generatedAt),
       orderNumber: invoice.orderNumber,
-      orderDate: formatDateDmY(invoice.generatedAt),
+      orderDate: formatPdfDate(invoice.generatedAt),
       business: businessProfile,
       billedTo: invoice.billedTo,
       lines: pdfLines,

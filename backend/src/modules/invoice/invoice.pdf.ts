@@ -13,6 +13,53 @@ export interface InvoicePdfLine {
   amount: string; // quantity * rate
 }
 
+/**
+ * Standardizes any date or ISO string into clean Indian Date format DD/MM/YYYY.
+ * Strips out any timezone abbreviations (IST, GMT, etc.) or overflow text.
+ */
+export function formatPdfDate(dateInput: string | Date | undefined | null): string {
+  if (!dateInput) return '';
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+      return trimmed;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [yyyy, mm, dd] = trimmed.split('-');
+      return `${dd}/${mm}/${yyyy}`;
+    }
+  }
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) {
+    return String(dateInput).replace(/GMT.*$/i, '').replace(/\(.*?\)/g, '').trim().slice(0, 10);
+  }
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
+export function formatExpiryForPdf(exp: string | undefined | null): string {
+  if (!exp) return '';
+  const str = String(exp).trim();
+  if (/^\d{2}\/\d{2}$/.test(str)) return str;
+  if (str.includes('-')) {
+    const parts = str.split('-');
+    if (parts.length >= 2) {
+      return `${parts[1]}/${parts[0]?.slice(-2)}`;
+    }
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${mm}/${yy}`;
+  }
+  return str.slice(0, 7);
+}
+
 export interface InvoicePdfData {
   invoiceNumber: string;
   invoiceDate: string; // DD/MM/YYYY
@@ -108,6 +155,9 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 
       // Right Box: Invoice Reference & Dates
       const rightX = margin + 340;
+      const cleanInvoiceDate = formatPdfDate(data.invoiceDate);
+      const cleanOrderDate = formatPdfDate(data.orderDate);
+
       doc.font('Helvetica-Bold').fontSize(8).fillColor('#0f172a')
         .text('Invoice Number:', rightX, metaY + 6)
         .text('Invoice Date:', rightX, metaY + 20)
@@ -115,10 +165,10 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
         .text('Order Date:', rightX, metaY + 48);
 
       doc.font('Helvetica').fontSize(8).fillColor('#1e293b')
-        .text(data.invoiceNumber, rightX + 80, metaY + 6, { align: 'right', width: 105 })
-        .text(data.invoiceDate, rightX + 80, metaY + 20, { align: 'right', width: 105 })
-        .text(data.orderNumber, rightX + 80, metaY + 34, { align: 'right', width: 105 })
-        .text(data.orderDate, rightX + 80, metaY + 48, { align: 'right', width: 105 });
+        .text(data.invoiceNumber, rightX + 65, metaY + 6, { align: 'right', width: 120, lineBreak: false, ellipsis: true })
+        .text(cleanInvoiceDate, rightX + 65, metaY + 20, { align: 'right', width: 120, lineBreak: false, ellipsis: true })
+        .text(data.orderNumber, rightX + 65, metaY + 34, { align: 'right', width: 120, lineBreak: false, ellipsis: true })
+        .text(cleanOrderDate, rightX + 65, metaY + 48, { align: 'right', width: 120, lineBreak: false, ellipsis: true });
 
       // =========================================================================
       // 3. TABLE OF LINE ITEMS
@@ -177,9 +227,9 @@ export async function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
         doc.font('Helvetica-Bold').text(line.medicineName, cols.desc.x, currentY + 6, { width: cols.desc.w, align: cols.desc.align });
         doc.font('Helvetica');
         doc.text(line.packSize, cols.pack.x, currentY + 6, { width: cols.pack.w, align: cols.pack.align });
-        doc.text(line.batchNumber, cols.batch.x, currentY + 6, { width: cols.batch.w, align: cols.batch.align });
-        doc.text(line.expiryDate, cols.exp.x, currentY + 6, { width: cols.exp.w, align: cols.exp.align });
-        doc.text(String(line.quantity), cols.qty.x, currentY + 6, { width: cols.qty.w, align: cols.qty.align });
+        doc.text(line.batchNumber, cols.batch.x, currentY + 6, { width: cols.batch.w, align: cols.batch.align, lineBreak: false, ellipsis: true });
+        doc.text(formatExpiryForPdf(line.expiryDate), cols.exp.x, currentY + 6, { width: cols.exp.w, align: cols.exp.align, lineBreak: false, ellipsis: true });
+        doc.text(String(line.quantity), cols.qty.x, currentY + 6, { width: cols.qty.w, align: cols.qty.align, lineBreak: false });
         doc.text(line.mrp, cols.mrp.x, currentY + 6, { width: cols.mrp.w, align: cols.mrp.align });
         doc.text(line.rate, cols.rate.x, currentY + 6, { width: cols.rate.w, align: cols.rate.align });
         doc.font('Helvetica-Bold').text(line.amount, cols.amount.x, currentY + 6, { width: cols.amount.w, align: cols.amount.align });

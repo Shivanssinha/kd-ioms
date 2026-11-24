@@ -144,7 +144,8 @@ export class InvoiceController {
       }
     }
 
-    const { url, pdfBuffer } = await invoiceService.ensureInvoicePdf(invoice.invoiceId, 300);
+    const forceRegenerate = req.query.regenerate === 'true';
+    const { url, pdfBuffer } = await invoiceService.ensureInvoicePdf(invoice.invoiceId, 300, forceRegenerate);
 
     if (pdfBuffer) {
       const safeName = invoice.invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -238,7 +239,8 @@ export class InvoiceController {
     }
 
     // Ensure PDF is generated and uploaded to Supabase Storage
-    const { url, pdfPath } = await invoiceService.ensureInvoicePdf(invoiceId, 300);
+    const forceRegenerate = req.query.regenerate === 'true';
+    const { url, pdfPath } = await invoiceService.ensureInvoicePdf(invoiceId, 300, forceRegenerate);
 
     return ok(res, {
       code: 'INVOICE_PDF_URL_GENERATED',
@@ -288,7 +290,8 @@ export class InvoiceController {
       }
     }
 
-    const { url, pdfBuffer } = await invoiceService.ensureInvoicePdf(invoiceId, 300);
+    const forceRegenerate = req.query.regenerate === 'true';
+    const { url, pdfBuffer } = await invoiceService.ensureInvoicePdf(invoiceId, 300, forceRegenerate);
 
     if (pdfBuffer) {
       const safeName = invoice.invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
