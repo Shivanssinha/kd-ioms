@@ -8,6 +8,7 @@ import {
   Package,
   History,
   PlusCircle,
+  ShoppingBag,
   LogOut,
   User,
   ShieldCheck,
@@ -42,6 +43,11 @@ const deliveryRoutes: NavRouteItem[] = [
     label: 'Place Order',
     href: '/delivery/orders/new',
     icon: <PlusCircle className="w-4 h-4" />,
+  },
+  {
+    label: 'Catalog',
+    href: '/catalog',
+    icon: <ShoppingBag className="w-4 h-4" />,
   },
 ];
 
@@ -152,7 +158,7 @@ function DeliveryLayoutContent({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full">{children}</main>
+      <main className="flex-1 px-4 sm:px-6 py-2 sm:py-4 max-w-5xl mx-auto w-full">{children}</main>
 
       {/* Mobile Bottom Navigation Bar */}
       <BottomNav items={bottomNavItems} />

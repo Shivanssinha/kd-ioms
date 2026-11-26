@@ -20,7 +20,7 @@ export default function StockLedgerPage() {
   const totalPages = meta?.pagination?.totalPages ?? 1;
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 space-y-6">
+    <div className="max-w-7xl mx-auto pb-6 space-y-4">
       {/* Navigation Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Link href="/batches" className="hover:text-indigo-600 flex items-center gap-1 font-medium">

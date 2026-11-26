@@ -21,7 +21,7 @@ router.get(
 router.post(
   '/orders/:orderId/claim',
   authenticate,
-  authorize(USER_ROLE.DELIVERY),
+  authorize(USER_ROLE.DELIVERY, USER_ROLE.ADMIN),
   (req: Request, res: Response, next: NextFunction) => {
     deliveryController.claimOrder(req, res).catch(next);
   }
@@ -51,7 +51,7 @@ router.post(
 router.get(
   '/orders',
   authenticate,
-  authorize(USER_ROLE.DELIVERY),
+  authorize(USER_ROLE.DELIVERY, USER_ROLE.ADMIN),
   (req: Request, res: Response, next: NextFunction) => {
     deliveryController.getPartnerOrders(req, res).catch(next);
   }
@@ -71,7 +71,7 @@ router.get(
 router.post(
   '/orders/:orderId/complete',
   authenticate,
-  authorize(USER_ROLE.DELIVERY),
+  authorize(USER_ROLE.DELIVERY, USER_ROLE.ADMIN),
   deliveryPhotoUpload.single('photo'),
   handleUploadErrors,
   (req: Request, res: Response, next: NextFunction) => {

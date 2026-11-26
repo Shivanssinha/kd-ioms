@@ -60,10 +60,10 @@ export function Modal({
       }}
     >
       <div
-        className={`w-full ${widthClass} bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all`}
+        className={`w-full ${widthClass} max-h-[88vh] flex flex-col bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden transform transition-all`}
       >
         {(title || description) && (
-          <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-start justify-between shrink-0">
             <div>
               {title && (
                 <h3 id="modal-title" className="text-base font-semibold text-slate-900">
@@ -87,9 +87,9 @@ export function Modal({
           </div>
         )}
 
-        <div className="px-6 py-4">{children}</div>
+        <div className="px-6 py-4 overflow-y-auto flex-1 overscroll-contain">{children}</div>
 
-        {footer && <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">{footer}</div>}
+        {footer && <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2 shrink-0">{footer}</div>}
       </div>
     </div>
   );

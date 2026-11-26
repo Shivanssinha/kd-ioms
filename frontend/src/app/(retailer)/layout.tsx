@@ -45,26 +45,28 @@ function RetailerLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthLoading, isLoading, isApproved, pathname, router, showToast, user]);
 
+  const isLocked = user?.role === 'RETAILER' && !isApproved;
+
   const navItems: BottomNavItem[] = [
     {
       label: 'Catalog',
       href: '/catalog',
-      disabled: !isApproved,
-      lockBadge: !isApproved,
+      disabled: isLocked,
+      lockBadge: isLocked,
       disabledTooltip: 'KYC Approval Required to browse catalog',
     },
     {
       label: 'Cart',
       href: '/cart',
-      disabled: !isApproved,
-      lockBadge: !isApproved,
+      disabled: isLocked,
+      lockBadge: isLocked,
       disabledTooltip: 'KYC Approval Required to access cart',
     },
     {
       label: 'Orders',
       href: '/orders',
-      disabled: !isApproved,
-      lockBadge: !isApproved,
+      disabled: isLocked,
+      lockBadge: isLocked,
       disabledTooltip: 'KYC Approval Required to view orders',
     },
     {
@@ -88,7 +90,7 @@ function RetailerLayoutContent({ children }: { children: React.ReactNode }) {
         <Suspense fallback={<aside className="w-64 bg-slate-900 min-h-screen border-r border-slate-800" />}>
           <Sidebar />
         </Suspense>
-        <main className="flex-1 p-6 lg:p-8 max-w-7xl mx-auto overflow-y-auto">{children}</main>
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-2 sm:py-4 max-w-7xl mx-auto overflow-y-auto">{children}</main>
       </div>
     );
   }
@@ -182,7 +184,7 @@ function RetailerLayoutContent({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
-      <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full">{children}</main>
+      <main className="flex-1 px-4 sm:px-6 py-2 sm:py-4 max-w-5xl mx-auto w-full">{children}</main>
       <BottomNav items={navItems} />
     </div>
   );

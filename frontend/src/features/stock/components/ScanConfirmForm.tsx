@@ -29,6 +29,16 @@ export function ScanConfirmForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const [today, setToday] = useState('');
+  const [priceInclGstInput, setPriceInclGstInput] = useState(() => {
+    if (initialValues?.sellingPrice) {
+      const sp = parseFloat(initialValues.sellingPrice);
+      const gst = initialValues.gstRate ?? 12;
+      if (!isNaN(sp) && sp > 0) {
+        return (sp * (1 + gst / 100)).toFixed(2);
+      }
+    }
+    return '';
+  });
 
   useEffect(() => {
     setToday(new Date().toISOString().slice(0, 10));
@@ -84,7 +94,14 @@ export function ScanConfirmForm({
             if (!initialValues?.batchNumber && parsed.batchNumber) setValue('batchNumber', parsed.batchNumber);
             if (!initialValues?.expiryDate && parsed.expiryDate) setValue('expiryDate', parsed.expiryDate);
             if (!initialValues?.mrp && parsed.mrp) setValue('mrp', parsed.mrp);
-            if (!initialValues?.sellingPrice && parsed.sellingPrice) setValue('sellingPrice', parsed.sellingPrice);
+            if (!initialValues?.sellingPrice && parsed.sellingPrice) {
+              setValue('sellingPrice', parsed.sellingPrice);
+              const sp = parseFloat(parsed.sellingPrice);
+              const gst = parsed.gstRate ?? 12;
+              if (!isNaN(sp) && sp > 0) {
+                setPriceInclGstInput((sp * (1 + gst / 100)).toFixed(2));
+              }
+            }
             if (!initialValues?.purchaseRate && parsed.purchaseRate) setValue('purchaseRate', parsed.purchaseRate);
             if (!initialValues?.quantity && parsed.quantity) setValue('quantity', parsed.quantity);
             if (!initialValues?.supplierName && parsed.supplierName) setValue('supplierName', parsed.supplierName);
@@ -141,6 +158,11 @@ export function ScanConfirmForm({
       }
       if (initialValues.sellingPrice) {
         setValue('sellingPrice', initialValues.sellingPrice, { shouldValidate: true, shouldDirty: true });
+        const sp = parseFloat(initialValues.sellingPrice);
+        const gst = initialValues.gstRate ?? 12;
+        if (!isNaN(sp) && sp > 0) {
+          setPriceInclGstInput((sp * (1 + gst / 100)).toFixed(2));
+        }
       }
       if (initialValues.purchaseRate) {
         setValue('purchaseRate', initialValues.purchaseRate);
@@ -168,18 +190,39 @@ export function ScanConfirmForm({
   const watchedGstRate = watch('gstRate') ?? 12;
   const watchedCaptureMethod = watch('captureMethod');
 
-  // Compute live price inclusive of GST
+  // Compute live price inclusive of GST & MRP ceiling
   const parsedSp = parseFloat(watchedSellingPrice || '0');
   const parsedMrp = parseFloat(watchedMrp || '0');
-  const priceInclGst = (parsedSp * (1 + watchedGstRate / 100)).toFixed(2);
-  const exceedsMrp = parsedMrp > 0 && parseFloat(priceInclGst) > parsedMrp;
+  const parsedPriceInclGst = parseFloat(priceInclGstInput || '0');
+  const calculatedPriceInclGst = (parsedSp * (1 + watchedGstRate / 100)).toFixed(2);
+  const effectivePriceInclGst = parsedPriceInclGst > 0 ? parsedPriceInclGst : parseFloat(calculatedPriceInclGst);
+  const exceedsMrp = parsedMrp > 0 && effectivePriceInclGst > parsedMrp;
+
+  const handlePriceInclGstChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setPriceInclGstInput(val);
+    const parsed = parseFloat(val);
+    if (!isNaN(parsed) && parsed > 0) {
+      const baseSp = (parsed / (1 + watchedGstRate / 100)).toFixed(2);
+      setValue('sellingPrice', baseSp, { shouldValidate: true, shouldDirty: true });
+    } else {
+      setValue('sellingPrice', '', { shouldValidate: true, shouldDirty: true });
+    }
+  };
 
   const handleMedicineSelect = (medicine: MedicineRecord) => {
     setSelectedMedicine(medicine);
     setValue('medicineId', medicine.medicineId, { shouldValidate: true });
     setValue('medicineName', medicine.name);
     setValue('medicineCompany', medicine.company);
-    setValue('gstRate', parseFloat(medicine.gstRate) || 12);
+    const rate = parseFloat(medicine.gstRate) || 12;
+    setValue('gstRate', rate);
+    if (priceInclGstInput) {
+      const entered = parseFloat(priceInclGstInput);
+      if (!isNaN(entered) && entered > 0) {
+        setValue('sellingPrice', (entered / (1 + rate / 100)).toFixed(2), { shouldValidate: true });
+      }
+    }
   };
 
   const handleCreateNewMedicine = (medicineName: string) => {
@@ -205,6 +248,7 @@ export function ScanConfirmForm({
       // ignore
     }
     setDraftRestored(false);
+    setPriceInclGstInput('');
     reset({
       medicineId: 0,
       medicineName: '',
@@ -472,26 +516,30 @@ export function ScanConfirmForm({
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Selling Price before GST (₹) <span className="text-red-500">*</span>
+              Selling Price (incl. GST) (₹) <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
-              {...register('sellingPrice')}
-              placeholder="e.g. 120.00"
+              value={priceInclGstInput}
+              onChange={handlePriceInclGstChange}
+              placeholder="e.g. 134.40"
               style={{ color: '#000000', WebkitTextFillColor: '#000000', colorScheme: 'light' }}
               className="w-full px-3 py-2 text-sm bg-white text-black !text-black border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono placeholder:text-slate-400"
             />
+            <input type="hidden" {...register('sellingPrice')} />
             {errors.sellingPrice && (
               <p className="text-xs text-red-600 mt-1">{errors.sellingPrice.message}</p>
             )}
           </div>
         </div>
 
-        {/* GST Preview & Ceiling Warning */}
+        {/* Base Selling Price Preview & Ceiling Warning */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs pt-1 border-t border-slate-200">
           <span className="text-slate-600">
-            Calculated Price (incl. {watchedGstRate}% GST):{' '}
-            <strong className="text-slate-900 font-mono">₹{priceInclGst}</strong>
+            Selling Price (excl. {watchedGstRate}% GST):{' '}
+            <strong className="text-slate-900 font-mono">
+              ₹{watchedSellingPrice && !isNaN(parseFloat(watchedSellingPrice)) ? parseFloat(watchedSellingPrice).toFixed(2) : '0.00'}
+            </strong>
           </span>
           {exceedsMrp && (
             <span className="text-red-600 font-semibold flex items-center gap-1 mt-1 sm:mt-0">

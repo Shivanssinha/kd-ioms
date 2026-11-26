@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ShoppingBag, ArrowLeft, Trash2, AlertTriangle, Check, RefreshCw, ShoppingCart } from 'lucide-react';
 import { useCart } from './useCart';
 import { placeOrder } from '../../lib/api/orders.api';
 import { ApiError } from '../../lib/api/api-error';
+import { useAuth } from '../../providers/AuthProvider';
 
 export interface CartCheckoutViewProps {
   onBehalfRetailerId?: string;
@@ -15,7 +16,27 @@ export interface CartCheckoutViewProps {
 
 export function CartCheckoutView({ onBehalfRetailerId, onBehalfPharmacyName }: CartCheckoutViewProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const { items, totalQuantity, subtotal, updateQuantity, removeItem, clearCart } = useCart();
+
+  const [savedRetailer, setSavedRetailer] = useState<{ userId: string; pharmacyName: string } | null>(null);
+
+  useEffect(() => {
+    if (!onBehalfRetailerId) {
+      try {
+        const stored = localStorage.getItem('kd_on_behalf_retailer');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.userId) setSavedRetailer(parsed);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [onBehalfRetailerId]);
+
+  const effectiveRetailerId = onBehalfRetailerId || savedRetailer?.userId;
+  const effectivePharmacyName = onBehalfPharmacyName || savedRetailer?.pharmacyName;
 
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +98,7 @@ export function CartCheckoutView({ onBehalfRetailerId, onBehalfPharmacyName }: C
       }
 
       const payload = {
-        retailerId: onBehalfRetailerId || undefined,
+        retailerId: effectiveRetailerId || undefined,
         note: note.trim() || null,
         items: items.map((i) => ({
           medicineId: i.medicineId,
@@ -90,7 +111,12 @@ export function CartCheckoutView({ onBehalfRetailerId, onBehalfPharmacyName }: C
 
       if (res.success && res.data) {
         clearCart();
-        if (onBehalfRetailerId) {
+        try {
+          localStorage.removeItem('kd_on_behalf_retailer');
+        } catch {
+          // ignore
+        }
+        if (user?.role === 'DELIVERY') {
           router.push('/delivery/orders');
         } else {
           router.push(`/orders/${res.data.orderId}`);
@@ -148,22 +174,52 @@ export function CartCheckoutView({ onBehalfRetailerId, onBehalfPharmacyName }: C
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-2 sm:py-4">
       {/* On-behalf Banner */}
-      {onBehalfRetailerId && (
-        <div className="mb-6 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center gap-3 text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <div>
-            <span className="font-semibold text-sm uppercase tracking-wider block">Ordering on Behalf</span>
-            <span className="text-base font-medium">
-              Placing order for pharmacy: <strong className="font-bold">{onBehalfPharmacyName || onBehalfRetailerId}</strong>
-            </span>
+      {effectiveRetailerId ? (
+        <div className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div>
+              <span className="font-semibold text-xs uppercase tracking-wider block text-amber-800 dark:text-amber-300">
+                Ordering on Behalf
+              </span>
+              <span className="text-sm font-medium">
+                Placing order for pharmacy: <strong className="font-bold">{effectivePharmacyName || effectiveRetailerId}</strong>
+              </span>
+            </div>
           </div>
+          <Link
+            href="/delivery/orders/new"
+            className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-200/80 hover:bg-amber-300/80 text-amber-900 transition-colors w-fit"
+          >
+            Change Pharmacy
+          </Link>
         </div>
-      )}
+      ) : (user?.role === 'DELIVERY' || user?.role === 'ADMIN') ? (
+        <div className="mb-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-blue-900 dark:text-blue-200">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-blue-600 dark:text-blue-400" />
+            <div>
+              <span className="font-semibold text-xs uppercase tracking-wider block text-blue-800 dark:text-blue-300">
+                On-Behalf Pharmacy Required
+              </span>
+              <span className="text-sm">
+                Select an approved pharmacy partner to associate with this order before completing checkout.
+              </span>
+            </div>
+          </div>
+          <Link
+            href="/delivery/orders/new"
+            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors shrink-0 shadow-sm w-fit"
+          >
+            Select Pharmacy
+          </Link>
+        </div>
+      ) : null}
 
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -392,23 +448,32 @@ export function CartCheckoutView({ onBehalfRetailerId, onBehalfPharmacyName }: C
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={isSubmitting || items.length === 0 || Object.keys(shortages).length > 0}
-              onClick={handleSubmitOrder}
-              className="w-full mt-2 py-4 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold text-base transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                  Placing Order...
-                </>
-              ) : Object.keys(shortages).length > 0 ? (
-                'Adjust Shortages to Place Order'
-              ) : (
-                `Place Order • ₹${subtotal}`
-              )}
-            </button>
+            {((user?.role === 'DELIVERY' || user?.role === 'ADMIN') && !effectiveRetailerId) ? (
+              <Link
+                href="/delivery/orders/new"
+                className="w-full mt-2 py-4 px-6 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+              >
+                Select Pharmacy to Place Order
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled={isSubmitting || items.length === 0 || Object.keys(shortages).length > 0}
+                onClick={handleSubmitOrder}
+                className="w-full mt-2 py-4 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold text-base transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                    Placing Order...
+                  </>
+                ) : Object.keys(shortages).length > 0 ? (
+                  'Adjust Shortages to Place Order'
+                ) : (
+                  `Place Order • ₹${subtotal}`
+                )}
+              </button>
+            )}
 
             <p className="text-[11px] text-center text-slate-400 mt-4 leading-relaxed">
               By confirming, inventory will be reserved immediately. You can cancel your order at any time while in PLACED status.

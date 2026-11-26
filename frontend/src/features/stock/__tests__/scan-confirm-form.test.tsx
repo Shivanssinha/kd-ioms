@@ -50,8 +50,9 @@ describe('ScanConfirmForm Component', () => {
 
     expect(screen.getByText('Paracetamol 500mg')).toBeDefined();
     expect(screen.getByDisplayValue('B-101')).toBeDefined();
-    // 80.00 * 1.12 = 89.60
-    expect(screen.getByText('₹89.60')).toBeDefined();
+    // 80.00 * 1.12 = 89.60 input value
+    expect(screen.getByDisplayValue('89.60')).toBeDefined();
+    expect(screen.getByText(/₹\s*80\.00/)).toBeDefined();
   });
 
   it('displays warning when selling price incl. GST exceeds MRP ceiling', async () => {

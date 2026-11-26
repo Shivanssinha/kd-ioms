@@ -180,9 +180,9 @@ function StockInwardContent() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
+    <div className="max-w-4xl mx-auto pb-6">
       {/* Page Header */}
-      <div className="mb-8">
+      <div className="mb-5">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Stock Inward Hub</h1>
         <p className="text-sm text-slate-500 mt-1">
           Receive physical stock into KD-IOMS using hardware barcode guns, mobile camera scanner, packaging photo OCR, or manual entry.

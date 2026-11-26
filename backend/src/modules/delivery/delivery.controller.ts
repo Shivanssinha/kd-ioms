@@ -232,6 +232,7 @@ export class DeliveryController {
 
     const order = await deliveryService.completeDelivery({
       partnerId: user.userId,
+      actorRole: user.role,
       orderId,
       file,
       decisions: parsed.data.decisions,

@@ -17,6 +17,39 @@ export default function DeliveryNewOrderPage() {
     pharmacyName: string;
   } | null>(null);
 
+  // Restore on-behalf context from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('kd_on_behalf_retailer');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.userId && parsed?.pharmacyName) {
+          setSelectedRetailer(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSelectRetailer = (retailer: { userId: string; pharmacyName: string }) => {
+    setSelectedRetailer(retailer);
+    try {
+      localStorage.setItem('kd_on_behalf_retailer', JSON.stringify(retailer));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleClearRetailer = () => {
+    setSelectedRetailer(null);
+    try {
+      localStorage.removeItem('kd_on_behalf_retailer');
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
@@ -52,9 +85,9 @@ export default function DeliveryNewOrderPage() {
     return (
       <div className="space-y-4">
         {/* Sticky Context Bar */}
-        <div className="bg-slate-900 text-white p-4 shadow-md flex items-center justify-between gap-4 sticky top-0 z-30">
+        <div className="bg-slate-900 text-white p-4 rounded-xl shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-0 z-30">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
               OB
             </div>
             <div>
@@ -67,13 +100,21 @@ export default function DeliveryNewOrderPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setSelectedRetailer(null)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
-          >
-            Change Pharmacy
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/catalog"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+            >
+              Browse Medicine Catalog
+            </Link>
+            <button
+              type="button"
+              onClick={handleClearRetailer}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border border-slate-700"
+            >
+              Change Pharmacy
+            </button>
+          </div>
         </div>
 
         <CartCheckoutView
@@ -85,19 +126,19 @@ export default function DeliveryNewOrderPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-8">
+    <div className="max-w-4xl mx-auto px-4 py-3 sm:py-5">
+      <div className="mb-4">
         <Link
           href="/delivery/orders"
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 mb-3"
+          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 mb-2"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to Delivery Dashboard
         </Link>
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
           Select Pharmacy for Order
         </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
           Choose an approved pharmacy partner to create an order and reserve inventory on their behalf.
         </p>
       </div>
@@ -177,7 +218,7 @@ export default function DeliveryNewOrderPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setSelectedRetailer({
+                  handleSelectRetailer({
                     userId: r.userId,
                     pharmacyName: r.shopName,
                   })

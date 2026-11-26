@@ -71,15 +71,14 @@ describe('Next.js Route Protection Middleware', () => {
     expect(res.headers.get('location')).toBe('http://localhost:3000/catalog');
   });
 
-  it('redirects authenticated admins attempting to access /cart to /dashboard', () => {
+  it('allows authenticated admins to access /cart for on-behalf ordering', () => {
     const req = createMockRequest('/cart', {
       accessToken: 'valid-admin-jwt',
       userRole: 'ADMIN',
     });
     const res = middleware(req);
 
-    expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost:3000/dashboard');
+    expect(res.status).toBe(200);
   });
 
   it('redirects authenticated admin on /login directly to /dashboard', () => {
@@ -143,15 +142,14 @@ describe('Next.js Route Protection Middleware', () => {
     expect(res.headers.get('location')).toBe('http://localhost:3000/delivery/orders');
   });
 
-  it('redirects authenticated delivery partner attempting to access /catalog to /delivery/orders', () => {
+  it('allows authenticated delivery partner to access /catalog for on-behalf ordering', () => {
     const req = createMockRequest('/catalog', {
       accessToken: 'valid-delivery-jwt',
       userRole: 'DELIVERY',
     });
     const res = middleware(req);
 
-    expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost:3000/delivery/orders');
+    expect(res.status).toBe(200);
   });
 
   it('redirects authenticated delivery partner on /login directly to /delivery/orders', () => {

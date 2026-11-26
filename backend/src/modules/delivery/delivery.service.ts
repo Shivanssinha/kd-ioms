@@ -560,11 +560,12 @@ export class DeliveryService {
    */
   async completeDelivery(params: {
     partnerId: string;
+    actorRole?: string;
     orderId: number;
     file?: { buffer: Buffer; mimetype: string };
     decisions: LineDecisionDto[];
   }): Promise<DeliveryOrderDetailDto> {
-    const { partnerId, orderId, file, decisions } = params;
+    const { partnerId, actorRole, orderId, file, decisions } = params;
 
     if (!file || !file.buffer || file.buffer.length === 0) {
       throw new ValidationError({
@@ -609,7 +610,7 @@ export class DeliveryService {
         });
       }
 
-      if (order.delivery_partner_id !== partnerId) {
+      if (order.delivery_partner_id !== partnerId && actorRole !== USER_ROLE.ADMIN) {
         throw new ForbiddenError({
           code: ERROR_CODES.FORBIDDEN,
           message: 'You are not the assigned delivery partner for this order',
